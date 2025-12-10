@@ -1,4 +1,3 @@
-import * as XLSX from "xlsx";
 import { Project, COUNTRIES, SEGMENT_LABELS, TEST_TYPE_LABELS, WORKFLOW_STEPS } from "@/types/project";
 import { Release } from "@/types/release";
 import { format } from "date-fns";
@@ -16,7 +15,8 @@ const getStatusLabel = (status: string) => {
   return labels[status] || status;
 };
 
-export function exportDashboardReport(projects: Project[], releases: Release[]) {
+export async function exportDashboardReport(projects: Project[], releases: Release[]) {
+  const XLSX = await import("xlsx");
   const workbook = XLSX.utils.book_new();
   const reportDate = format(new Date(), "dd/MM/yyyy HH:mm", { locale: it });
 
