@@ -16,7 +16,7 @@ const INITIAL_PROJECTS: Project[] = [
       id: 'r-austria-1',
       roundNumber: 1,
       testType: 'test-suite',
-      currentStep: 2,
+      currentStep: 3,
       startedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
     }],
     createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
@@ -32,7 +32,7 @@ const INITIAL_PROJECTS: Project[] = [
       id: 'r-rep-ceca-1',
       roundNumber: 1,
       testType: 'test-suite',
-      currentStep: 4,
+      currentStep: 5,
       startedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
       completedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
     }],
@@ -50,11 +50,29 @@ const INITIAL_PROJECTS: Project[] = [
       id: 'r-belgio-1',
       roundNumber: 1,
       testType: 'categorization',
-      currentStep: 1,
+      currentStep: 3,
       startedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
     }],
     createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: 'italia-1',
+    country: 'ITA',
+    segment: 'consumer',
+    status: 'waiting',
+    currentRound: 1,
+    rounds: [{
+      id: 'r-italia-1',
+      roundNumber: 1,
+      testType: 'test-suite',
+      currentStep: 5,
+      startedAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
+      completedAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+    }],
+    createdAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+    awaitingConfirmation: true,
   },
 ];
 
@@ -65,8 +83,13 @@ export function useProjects() {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
-      // Check if stored projects have segment field, if not use initial
-      if (parsed.length > 0 && !parsed[0].segment) {
+      // Reset if old data structure (no segment or old step count)
+      const needsReset = parsed.length > 0 && (
+        !parsed[0].segment || 
+        !parsed.find((p: Project) => p.country === 'ITA') ||
+        parsed.some((p: Project) => p.rounds?.some((r: WorkflowRound) => r.currentStep > 5))
+      );
+      if (needsReset) {
         setProjects(INITIAL_PROJECTS);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_PROJECTS));
       } else {
@@ -122,14 +145,14 @@ export function useProjects() {
       updatedRounds[currentRoundIndex] = {
         ...updatedRounds[currentRoundIndex],
         currentStep: step,
-        ...(step === 4 ? { completedAt: new Date().toISOString() } : {}),
+        ...(step === 5 ? { completedAt: new Date().toISOString() } : {}),
       };
 
       return {
         ...project,
         rounds: updatedRounds,
         updatedAt: new Date().toISOString(),
-        ...(step === 4 ? { awaitingConfirmation: true, status: 'waiting' as const } : {}),
+        ...(step === 5 ? { awaitingConfirmation: true, status: 'waiting' as const } : {}),
       };
     });
 
