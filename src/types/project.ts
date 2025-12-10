@@ -1,4 +1,4 @@
-export type WorkflowStep = 1 | 2 | 3 | 4;
+export type WorkflowStep = 1 | 2 | 3 | 4 | 5;
 
 export type Segment = 'consumer' | 'business' | 'tagger';
 
@@ -30,10 +30,11 @@ export interface Project {
 }
 
 export const WORKFLOW_STEPS: Record<WorkflowStep, { label: string; description: string }> = {
-  1: { label: 'Ricezione Info', description: 'Analisi team, email ricevuta e definizione tipo test' },
-  2: { label: 'Generazione Modello', description: 'Generazione modello e esecuzione test' },
-  3: { label: 'Upload ZIP', description: 'Creazione e upload ZIP sul server condiviso' },
-  4: { label: 'Email Inviata', description: 'Email di notifica inviata al team' },
+  1: { label: 'Ricezione Info', description: 'Ricezione informazioni dal team' },
+  2: { label: 'Generazione Modelli', description: 'Generazione dei modelli ML' },
+  3: { label: 'TestSuite', description: 'Esecuzione test suite / categorizzazione / tagging' },
+  4: { label: 'Upload ZIP', description: 'Creazione e upload ZIP sul server condiviso' },
+  5: { label: 'Output Inviato', description: 'Output inviato al team' },
 };
 
 export interface CountryConfig {
