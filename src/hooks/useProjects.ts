@@ -16,7 +16,7 @@ const INITIAL_PROJECTS: Project[] = [
       id: 'r-austria-1',
       roundNumber: 1,
       testType: 'test-suite',
-      currentStep: 4,
+      currentStep: 2,
       startedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
     }],
     createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
@@ -32,7 +32,7 @@ const INITIAL_PROJECTS: Project[] = [
       id: 'r-rep-ceca-1',
       roundNumber: 1,
       testType: 'test-suite',
-      currentStep: 6,
+      currentStep: 4,
       startedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
       completedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
     }],
@@ -122,14 +122,14 @@ export function useProjects() {
       updatedRounds[currentRoundIndex] = {
         ...updatedRounds[currentRoundIndex],
         currentStep: step,
-        ...(step === 6 ? { completedAt: new Date().toISOString() } : {}),
+        ...(step === 4 ? { completedAt: new Date().toISOString() } : {}),
       };
 
       return {
         ...project,
         rounds: updatedRounds,
         updatedAt: new Date().toISOString(),
-        ...(step === 6 ? { awaitingConfirmation: true, status: 'waiting' as const } : {}),
+        ...(step === 4 ? { awaitingConfirmation: true, status: 'waiting' as const } : {}),
       };
     });
 

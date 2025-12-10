@@ -1,15 +1,13 @@
 import { WorkflowStep, WORKFLOW_STEPS } from '@/types/project';
 import { cn } from '@/lib/utils';
-import { Check, Mail, FileText, Cog, Upload, Send } from 'lucide-react';
+import { Check, Mail, Cog, Upload, Send } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 const STEP_ICONS: Record<WorkflowStep, React.ElementType> = {
-  1: FileText,
-  2: Mail,
-  3: FileText,
-  4: Cog,
-  5: Upload,
-  6: Send,
+  1: Mail,
+  2: Cog,
+  3: Upload,
+  4: Send,
 };
 
 interface WorkflowProgressProps {
