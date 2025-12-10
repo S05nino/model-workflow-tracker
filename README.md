@@ -1,73 +1,152 @@
-# Welcome to your Lovable project
+# ML Workflow Tracker
 
-## Project info
+Dashboard per la gestione del workflow di fine-tuning di modelli ML multi-paese.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Panoramica
 
-## How can I edit this code?
+Questa applicazione permette di tracciare e gestire il processo di fine-tuning dei modelli ML per diversi paesi e segmenti. Include:
 
-There are several ways of editing your application.
+- **Gestione Progetti**: Tracciamento dello stato di avanzamento per ogni paese/segmento
+- **Gestione Rilasci**: Organizzazione dei modelli confermati per versione di rilascio
+- **Export Report**: Generazione di report Excel completi per la condivisione con il team
 
-**Use Lovable**
+## Requisiti
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+- Node.js 18+ 
+- npm o bun
 
-Changes made via Lovable will be committed automatically to this repo.
+## Installazione
 
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
+```bash
+# Clona il repository
 git clone <YOUR_GIT_URL>
 
-# Step 2: Navigate to the project directory.
+# Entra nella directory del progetto
 cd <YOUR_PROJECT_NAME>
 
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+# Installa le dipendenze
+npm install
+# oppure
+bun install
 ```
 
-**Edit a file directly in GitHub**
+## Avvio
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+```bash
+# Avvia il server di sviluppo
+npm run dev
+# oppure
+bun dev
+```
 
-**Use GitHub Codespaces**
+L'applicazione sarà disponibile su `http://localhost:5173`
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Utilizzo
 
-## What technologies are used for this project?
+### Tab Progetti
 
-This project is built with:
+#### Creare un nuovo progetto
+1. Clicca sul pulsante **"Nuovo Progetto"** in alto a destra
+2. Seleziona il **Paese** dal menu dropdown
+3. Seleziona il **Segmento** (Consumer, Business, Tagger)
+4. Seleziona il **Tipo di Test** (Categorizzazione, Test Suite, Tagging)
+5. Clicca **"Crea Progetto"**
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+#### Workflow Steps
+Ogni progetto attraversa 5 step:
+1. **Ricezione Info** - Ricezione informazioni dal team
+2. **Generazione Modelli** - Generazione dei modelli ML
+3. **TestSuite** - Esecuzione test suite / categorizzazione / tagging
+4. **Upload ZIP** - Creazione e upload ZIP sul server condiviso
+5. **Output Inviato** - Output inviato al team
 
-## How can I deploy this project?
+#### Gestire un progetto
+- Usa i pulsanti **freccia** per avanzare/tornare indietro negli step
+- Clicca **"Nuovo Giro"** per iniziare un nuovo round iterativo
+- Clicca **"Conferma Modello"** quando il modello è approvato
+- Usa il menu **⋮** per cambiare stato o eliminare il progetto
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+#### Filtri
+Usa la barra filtri per visualizzare progetti per:
+- **Stato**: In Corso, In Attesa, In Pausa
+- **Paese**: Filtra per singolo paese
 
-## Can I connect a custom domain to my Lovable project?
+### Tab Rilasci
 
-Yes, you can!
+#### Creare un nuovo rilascio
+1. Clicca su **"Nuovo Rilascio"**
+2. Inserisci la **Versione** (es. 7.6.6)
+3. Seleziona la **Data Target** di scadenza
+4. Seleziona i **Modelli** da includere (paese + segmento)
+5. Clicca **"Crea Rilascio"**
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+#### Gestire un rilascio
+- **Includi/Escludi modelli**: Usa il toggle per includere o escludere un modello dal rilascio
+- **Conferma modello**: Clicca sul pulsante di conferma e inserisci gli ID:
+  - Model Out ID
+  - Model In ID
+  - Rules Out ID
+  - Rules In ID
+  (non tutti sono obbligatori)
+- **Completa rilascio**: Quando tutti i modelli sono confermati, clicca "Completa Rilascio"
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+I rilasci sono ordinati per scadenza (il più vicino in primo).
+
+### Export Report Excel
+
+1. Clicca sul pulsante **"Esporta Report"** nell'header
+2. Verrà scaricato un file Excel con 5 fogli:
+   - **Riepilogo**: Statistiche generali
+   - **Progetti Attivi**: Lista progetti in corso
+   - **Progetti Completati**: Storico progetti completati
+   - **Rilasci Attivi**: Dettaglio rilasci in corso con tutti gli ID
+   - **Rilasci Completati**: Storico rilasci completati
+
+## Paesi Supportati
+
+| Codice | Paese | Segmenti Disponibili |
+|--------|-------|---------------------|
+| AUT | Austria | Consumer |
+| BEL | Belgio | Consumer, Business |
+| CZK | Rep. Ceca | Consumer, Business |
+| DEU | Germania | Consumer, Business, Tagger |
+| ESP | Spagna | Consumer, Business, Tagger |
+| FRA | Francia | Consumer, Business, Tagger |
+| GBR | Regno Unito | Consumer, Business, Tagger |
+| IND | India | Consumer, Business, Tagger |
+| IRL | Irlanda | Consumer, Business |
+| ITA | Italia | Consumer, Business, Tagger |
+| ITA2 | Italia 2 | Consumer, Business |
+| MEX | Messico | Tagger |
+| POL | Polonia | Consumer |
+| POR | Portogallo | Consumer |
+| USA | USA | Consumer |
+
+## Tipi di Test per Segmento
+
+- **Consumer / Business**: Categorizzazione, Test Suite
+- **Tagger**: Tagging, Test Suite
+
+## Persistenza Dati
+
+I dati sono salvati nel `localStorage` del browser. Per condividere lo stato con i colleghi, usa la funzione **Export Report**.
+
+## Tecnologie
+
+- **React** + **TypeScript**
+- **Vite** - Build tool
+- **Tailwind CSS** - Styling
+- **shadcn/ui** - Componenti UI
+- **date-fns** - Gestione date
+- **xlsx** - Generazione Excel
+- **Lucide React** - Icone
+
+## Build per Produzione
+
+```bash
+npm run build
+# oppure
+bun run build
+```
+
+I file di output saranno nella cartella `dist/`.
