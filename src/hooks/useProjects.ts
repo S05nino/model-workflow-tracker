@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Project, WorkflowRound, TestType, WorkflowStep } from '@/types/project';
+import { Project, WorkflowRound, TestType, WorkflowStep, Segment } from '@/types/project';
 
 const STORAGE_KEY = 'ml-workflow-projects';
 
@@ -8,7 +8,8 @@ const generateId = () => Math.random().toString(36).substring(2, 9);
 const INITIAL_PROJECTS: Project[] = [
   {
     id: 'austria-1',
-    country: 'Austria',
+    country: 'AUT',
+    segment: 'consumer',
     status: 'in-progress',
     currentRound: 1,
     rounds: [{
@@ -23,7 +24,8 @@ const INITIAL_PROJECTS: Project[] = [
   },
   {
     id: 'rep-ceca-1',
-    country: 'Rep. Ceca',
+    country: 'CZE',
+    segment: 'consumer',
     status: 'waiting',
     currentRound: 1,
     rounds: [{
@@ -40,7 +42,8 @@ const INITIAL_PROJECTS: Project[] = [
   },
   {
     id: 'belgio-1',
-    country: 'Belgio',
+    country: 'BEL',
+    segment: 'business',
     status: 'in-progress',
     currentRound: 1,
     rounds: [{
@@ -61,9 +64,15 @@ export function useProjects() {
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
-      setProjects(JSON.parse(stored));
+      const parsed = JSON.parse(stored);
+      // Check if stored projects have segment field, if not use initial
+      if (parsed.length > 0 && !parsed[0].segment) {
+        setProjects(INITIAL_PROJECTS);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_PROJECTS));
+      } else {
+        setProjects(parsed);
+      }
     } else {
-      // Load initial demo projects
       setProjects(INITIAL_PROJECTS);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_PROJECTS));
     }
@@ -74,7 +83,7 @@ export function useProjects() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(newProjects));
   };
 
-  const addProject = (country: string, testType: TestType) => {
+  const addProject = (country: string, segment: Segment, testType: TestType) => {
     const now = new Date().toISOString();
     const newRound: WorkflowRound = {
       id: generateId(),
@@ -87,6 +96,7 @@ export function useProjects() {
     const newProject: Project = {
       id: generateId(),
       country,
+      segment,
       status: 'in-progress',
       currentRound: 1,
       rounds: [newRound],
@@ -119,6 +129,7 @@ export function useProjects() {
         ...project,
         rounds: updatedRounds,
         updatedAt: new Date().toISOString(),
+        ...(step === 6 ? { awaitingConfirmation: true, status: 'waiting' as const } : {}),
       };
     });
 
@@ -143,6 +154,7 @@ export function useProjects() {
         currentRound: newRoundNumber,
         rounds: [...project.rounds, newRound],
         status: 'in-progress' as const,
+        awaitingConfirmation: false,
         updatedAt: new Date().toISOString(),
       };
     });
@@ -157,6 +169,7 @@ export function useProjects() {
       return {
         ...project,
         status: 'completed' as const,
+        awaitingConfirmation: false,
         confirmedAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };

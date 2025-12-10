@@ -1,4 +1,4 @@
-import { Project, WorkflowStep, TestType } from '@/types/project';
+import { Project, WorkflowStep, TestType, COUNTRIES, SEGMENT_LABELS, TEST_TYPE_LABELS, getTestTypesForSegment } from '@/types/project';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from './StatusBadge';
@@ -47,6 +47,10 @@ export function ProjectCard({
   const currentRoundData = project.rounds.find(r => r.roundNumber === project.currentRound);
   const isRoundCompleted = currentRoundData?.currentStep === 6;
   const isProjectCompleted = project.status === 'completed';
+  
+  const countryConfig = COUNTRIES.find(c => c.code === project.country);
+  const countryName = countryConfig?.name || project.country;
+  const availableTestTypes = getTestTypesForSegment(project.segment);
 
   const handleAdvanceStep = () => {
     if (currentRoundData && currentRoundData.currentStep < 6) {
@@ -60,16 +64,22 @@ export function ProjectCard({
       isProjectCompleted && "opacity-75"
     )}>
       <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3">
-        <div className="space-y-1">
+        <div className="space-y-2">
           <div className="flex items-center gap-2">
             <Globe className="w-4 h-4 text-primary" />
-            <h3 className="font-semibold text-lg text-foreground">{project.country}</h3>
+            <h3 className="font-semibold text-lg text-foreground">{countryName}</h3>
+            <span className="font-mono text-xs text-muted-foreground">({project.country})</span>
           </div>
-          {project.awaitingConfirmation && (
-            <Badge variant="warning" className="text-xs">
-              In attesa di conferma modello
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="text-xs">
+              {SEGMENT_LABELS[project.segment]}
             </Badge>
-          )}
+            {project.awaitingConfirmation && (
+              <Badge variant="warning" className="text-xs">
+                In attesa di conferma
+              </Badge>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge status={project.status} />
@@ -113,8 +123,8 @@ export function ProjectCard({
               Round {project.currentRound}
             </span>
             {currentRoundData && (
-              <Badge variant={currentRoundData.testType === 'categorization' ? 'info' : 'warning'}>
-                {currentRoundData.testType === 'categorization' ? 'Categorizzazione' : 'Test Suite'}
+              <Badge variant={currentRoundData.testType === 'test-suite' ? 'warning' : 'info'}>
+                {TEST_TYPE_LABELS[currentRoundData.testType]}
               </Badge>
             )}
           </div>
@@ -154,12 +164,11 @@ export function ProjectCard({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent>
-                    <DropdownMenuItem onClick={() => onStartNewRound('categorization')}>
-                      Categorizzazione
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onStartNewRound('test-suite')}>
-                      Test Suite Completa
-                    </DropdownMenuItem>
+                    {availableTestTypes.map((tt) => (
+                      <DropdownMenuItem key={tt} onClick={() => onStartNewRound(tt)}>
+                        {TEST_TYPE_LABELS[tt]}
+                      </DropdownMenuItem>
+                    ))}
                   </DropdownMenuContent>
                 </DropdownMenu>
                 <Button 
@@ -173,6 +182,35 @@ export function ProjectCard({
                 </Button>
               </>
             )}
+          </div>
+        )}
+
+        {project.status === 'waiting' && project.awaitingConfirmation && (
+          <div className="flex gap-2 pt-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="flex-1 gap-2">
+                  <Plus className="w-4 h-4" />
+                  Nuovo Round
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                {availableTestTypes.map((tt) => (
+                  <DropdownMenuItem key={tt} onClick={() => onStartNewRound(tt)}>
+                    {TEST_TYPE_LABELS[tt]}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button 
+              onClick={onConfirm}
+              variant="default"
+              size="sm"
+              className="flex-1 gap-2 bg-success hover:bg-success/90"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              Conferma Modello
+            </Button>
           </div>
         )}
 

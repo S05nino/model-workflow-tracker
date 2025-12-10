@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -16,27 +16,52 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { COUNTRIES, TestType } from '@/types/project';
+import { 
+  COUNTRIES, 
+  Segment, 
+  TestType, 
+  SEGMENT_LABELS, 
+  TEST_TYPE_LABELS,
+  getTestTypesForSegment 
+} from '@/types/project';
 import { Plus } from 'lucide-react';
 
 interface NewProjectDialogProps {
-  onAdd: (country: string, testType: TestType) => void;
+  onAdd: (country: string, segment: Segment, testType: TestType) => void;
 }
 
 export function NewProjectDialog({ onAdd }: NewProjectDialogProps) {
   const [open, setOpen] = useState(false);
-  const [country, setCountry] = useState('');
-  const [testType, setTestType] = useState<TestType>('categorization');
+  const [countryCode, setCountryCode] = useState('');
+  const [segment, setSegment] = useState<Segment | ''>('');
+  const [testType, setTestType] = useState<TestType | ''>('');
+
+  const selectedCountry = COUNTRIES.find(c => c.code === countryCode);
+  const availableSegments = selectedCountry?.segments || [];
+  const availableTestTypes = segment ? getTestTypesForSegment(segment) : [];
+
+  // Reset dependent fields when parent changes
+  useEffect(() => {
+    setSegment('');
+    setTestType('');
+  }, [countryCode]);
+
+  useEffect(() => {
+    setTestType('');
+  }, [segment]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (country) {
-      onAdd(country, testType);
-      setCountry('');
-      setTestType('categorization');
+    if (countryCode && segment && testType) {
+      onAdd(countryCode, segment, testType);
+      setCountryCode('');
+      setSegment('');
+      setTestType('');
       setOpen(false);
     }
   };
+
+  const isValid = countryCode && segment && testType;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -53,43 +78,65 @@ export function NewProjectDialog({ onAdd }: NewProjectDialogProps) {
         <form onSubmit={handleSubmit} className="space-y-4 pt-4">
           <div className="space-y-2">
             <Label htmlFor="country">Paese</Label>
-            <Select value={country} onValueChange={setCountry}>
+            <Select value={countryCode} onValueChange={setCountryCode}>
               <SelectTrigger>
                 <SelectValue placeholder="Seleziona paese" />
               </SelectTrigger>
               <SelectContent>
                 {COUNTRIES.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {c}
+                  <SelectItem key={c.code} value={c.code}>
+                    {c.name} ({c.code})
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label>Tipo di Test</Label>
-            <RadioGroup 
-              value={testType} 
-              onValueChange={(v) => setTestType(v as TestType)}
-              className="flex gap-4"
-            >
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="categorization" id="cat" />
-                <Label htmlFor="cat" className="cursor-pointer">Categorizzazione</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="test-suite" id="test" />
-                <Label htmlFor="test" className="cursor-pointer">Test Suite</Label>
-              </div>
-            </RadioGroup>
-          </div>
+          {countryCode && (
+            <div className="space-y-2 animate-fade-in">
+              <Label>Segmento</Label>
+              <RadioGroup 
+                value={segment} 
+                onValueChange={(v) => setSegment(v as Segment)}
+                className="flex flex-wrap gap-4"
+              >
+                {availableSegments.map((seg) => (
+                  <div key={seg} className="flex items-center space-x-2">
+                    <RadioGroupItem value={seg} id={`seg-${seg}`} />
+                    <Label htmlFor={`seg-${seg}`} className="cursor-pointer">
+                      {SEGMENT_LABELS[seg]}
+                    </Label>
+                  </div>
+                ))}
+              </RadioGroup>
+            </div>
+          )}
+
+          {segment && (
+            <div className="space-y-2 animate-fade-in">
+              <Label>Tipo di Test</Label>
+              <RadioGroup 
+                value={testType} 
+                onValueChange={(v) => setTestType(v as TestType)}
+                className="flex flex-wrap gap-4"
+              >
+                {availableTestTypes.map((tt) => (
+                  <div key={tt} className="flex items-center space-x-2">
+                    <RadioGroupItem value={tt} id={`tt-${tt}`} />
+                    <Label htmlFor={`tt-${tt}`} className="cursor-pointer">
+                      {TEST_TYPE_LABELS[tt]}
+                    </Label>
+                  </div>
+                ))}
+              </RadioGroup>
+            </div>
+          )}
 
           <div className="flex justify-end gap-2 pt-4">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Annulla
             </Button>
-            <Button type="submit" disabled={!country}>
+            <Button type="submit" disabled={!isValid}>
               Crea Progetto
             </Button>
           </div>

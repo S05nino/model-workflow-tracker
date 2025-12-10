@@ -61,8 +61,8 @@ export function FilterBar({
         <SelectContent>
           <SelectItem value="all">Tutti i paesi</SelectItem>
           {COUNTRIES.map((c) => (
-            <SelectItem key={c} value={c}>
-              {c}
+            <SelectItem key={c.code} value={c.code}>
+              {c.name}
             </SelectItem>
           ))}
         </SelectContent>

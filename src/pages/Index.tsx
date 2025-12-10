@@ -4,7 +4,7 @@ import { ProjectCard } from '@/components/ProjectCard';
 import { NewProjectDialog } from '@/components/NewProjectDialog';
 import { DashboardStats } from '@/components/DashboardStats';
 import { FilterBar } from '@/components/FilterBar';
-import { ProjectStatus } from '@/types/project';
+import { ProjectStatus, Segment, TestType, COUNTRIES } from '@/types/project';
 import { Brain, Workflow } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -28,10 +28,11 @@ const Index = () => {
     return true;
   });
 
-  const handleAddProject = (country: string, testType: 'categorization' | 'test-suite') => {
-    addProject(country, testType);
+  const handleAddProject = (country: string, segment: Segment, testType: TestType) => {
+    addProject(country, segment, testType);
+    const countryName = COUNTRIES.find(c => c.code === country)?.name || country;
     toast.success('Progetto creato', {
-      description: `${country} aggiunto con successo`,
+      description: `${countryName} aggiunto con successo`,
     });
   };
 
