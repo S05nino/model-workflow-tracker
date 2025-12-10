@@ -1,75 +1,83 @@
-import { useState, useEffect } from 'react';
-import { Project, WorkflowRound, TestType, WorkflowStep, Segment } from '@/types/project';
+import { useState, useEffect } from "react";
+import { Project, WorkflowRound, TestType, WorkflowStep, Segment } from "@/types/project";
 
-const STORAGE_KEY = 'ml-workflow-projects';
+const STORAGE_KEY = "ml-workflow-projects";
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
 const INITIAL_PROJECTS: Project[] = [
   {
-    id: 'austria-1',
-    country: 'AUT',
-    segment: 'consumer',
-    status: 'in-progress',
+    id: "austria-1",
+    country: "AUT",
+    segment: "consumer",
+    status: "in-progress",
     currentRound: 1,
-    rounds: [{
-      id: 'r-austria-1',
-      roundNumber: 1,
-      testType: 'test-suite',
-      currentStep: 3,
-      startedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    }],
+    rounds: [
+      {
+        id: "r-austria-1",
+        roundNumber: 1,
+        testType: "test-suite",
+        currentStep: 3,
+        startedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+    ],
     createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
   },
   {
-    id: 'rep-ceca-1',
-    country: 'CZE',
-    segment: 'consumer',
-    status: 'waiting',
+    id: "rep-ceca-1",
+    country: "CZK",
+    segment: "consumer",
+    status: "waiting",
     currentRound: 1,
-    rounds: [{
-      id: 'r-rep-ceca-1',
-      roundNumber: 1,
-      testType: 'test-suite',
-      currentStep: 5,
-      startedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-      completedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-    }],
+    rounds: [
+      {
+        id: "r-rep-ceca-1",
+        roundNumber: 1,
+        testType: "test-suite",
+        currentStep: 5,
+        startedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+        completedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      },
+    ],
     createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
     awaitingConfirmation: true,
   },
   {
-    id: 'belgio-1',
-    country: 'BEL',
-    segment: 'business',
-    status: 'in-progress',
+    id: "belgio-1",
+    country: "BEL",
+    segment: "business",
+    status: "in-progress",
     currentRound: 1,
-    rounds: [{
-      id: 'r-belgio-1',
-      roundNumber: 1,
-      testType: 'categorization',
-      currentStep: 3,
-      startedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-    }],
+    rounds: [
+      {
+        id: "r-belgio-1",
+        roundNumber: 1,
+        testType: "categorization",
+        currentStep: 3,
+        startedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+    ],
     createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
   },
   {
-    id: 'italia-1',
-    country: 'ITA',
-    segment: 'consumer',
-    status: 'waiting',
+    id: "italia-1",
+    country: "ITA",
+    segment: "consumer",
+    status: "waiting",
     currentRound: 1,
-    rounds: [{
-      id: 'r-italia-1',
-      roundNumber: 1,
-      testType: 'test-suite',
-      currentStep: 5,
-      startedAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
-      completedAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
-    }],
+    rounds: [
+      {
+        id: "r-italia-1",
+        roundNumber: 1,
+        testType: "test-suite",
+        currentStep: 5,
+        startedAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
+        completedAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+      },
+    ],
     createdAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
     awaitingConfirmation: true,
@@ -84,11 +92,11 @@ export function useProjects() {
     if (stored) {
       const parsed = JSON.parse(stored);
       // Reset if old data structure (no segment or old step count)
-      const needsReset = parsed.length > 0 && (
-        !parsed[0].segment || 
-        !parsed.find((p: Project) => p.country === 'ITA') ||
-        parsed.some((p: Project) => p.rounds?.some((r: WorkflowRound) => r.currentStep > 5))
-      );
+      const needsReset =
+        parsed.length > 0 &&
+        (!parsed[0].segment ||
+          !parsed.find((p: Project) => p.country === "ITA") ||
+          parsed.some((p: Project) => p.rounds?.some((r: WorkflowRound) => r.currentStep > 5)));
       if (needsReset) {
         setProjects(INITIAL_PROJECTS);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_PROJECTS));
@@ -120,7 +128,7 @@ export function useProjects() {
       id: generateId(),
       country,
       segment,
-      status: 'in-progress',
+      status: "in-progress",
       currentRound: 1,
       rounds: [newRound],
       createdAt: now,
@@ -132,12 +140,10 @@ export function useProjects() {
   };
 
   const updateProjectStep = (projectId: string, step: WorkflowStep) => {
-    const updated = projects.map(project => {
+    const updated = projects.map((project) => {
       if (project.id !== projectId) return project;
 
-      const currentRoundIndex = project.rounds.findIndex(
-        r => r.roundNumber === project.currentRound
-      );
+      const currentRoundIndex = project.rounds.findIndex((r) => r.roundNumber === project.currentRound);
 
       if (currentRoundIndex === -1) return project;
 
@@ -152,7 +158,7 @@ export function useProjects() {
         ...project,
         rounds: updatedRounds,
         updatedAt: new Date().toISOString(),
-        ...(step === 5 ? { awaitingConfirmation: true, status: 'waiting' as const } : {}),
+        ...(step === 5 ? { awaitingConfirmation: true, status: "waiting" as const } : {}),
       };
     });
 
@@ -160,7 +166,7 @@ export function useProjects() {
   };
 
   const startNewRound = (projectId: string, testType: TestType) => {
-    const updated = projects.map(project => {
+    const updated = projects.map((project) => {
       if (project.id !== projectId) return project;
 
       const newRoundNumber = project.currentRound + 1;
@@ -176,7 +182,7 @@ export function useProjects() {
         ...project,
         currentRound: newRoundNumber,
         rounds: [...project.rounds, newRound],
-        status: 'in-progress' as const,
+        status: "in-progress" as const,
         awaitingConfirmation: false,
         updatedAt: new Date().toISOString(),
       };
@@ -186,12 +192,12 @@ export function useProjects() {
   };
 
   const confirmProject = (projectId: string) => {
-    const updated = projects.map(project => {
+    const updated = projects.map((project) => {
       if (project.id !== projectId) return project;
 
       return {
         ...project,
-        status: 'completed' as const,
+        status: "completed" as const,
         awaitingConfirmation: false,
         confirmedAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -201,8 +207,8 @@ export function useProjects() {
     saveProjects(updated);
   };
 
-  const updateProjectStatus = (projectId: string, status: Project['status']) => {
-    const updated = projects.map(project => {
+  const updateProjectStatus = (projectId: string, status: Project["status"]) => {
+    const updated = projects.map((project) => {
       if (project.id !== projectId) return project;
 
       return {
@@ -216,14 +222,14 @@ export function useProjects() {
   };
 
   const deleteProject = (projectId: string) => {
-    saveProjects(projects.filter(p => p.id !== projectId));
+    saveProjects(projects.filter((p) => p.id !== projectId));
   };
 
   const addRoundNotes = (projectId: string, roundNumber: number, notes: string) => {
-    const updated = projects.map(project => {
+    const updated = projects.map((project) => {
       if (project.id !== projectId) return project;
 
-      const updatedRounds = project.rounds.map(round => {
+      const updatedRounds = project.rounds.map((round) => {
         if (round.roundNumber !== roundNumber) return round;
         return { ...round, notes };
       });

@@ -1,23 +1,23 @@
-import { useState, useEffect } from 'react';
-import { Release, ReleaseModel, ReleaseModelIds } from '@/types/release';
-import { Segment } from '@/types/project';
+import { useState, useEffect } from "react";
+import { Release, ReleaseModel, ReleaseModelIds } from "@/types/release";
+import { Segment } from "@/types/project";
 
-const STORAGE_KEY = 'ml-workflow-releases';
+const STORAGE_KEY = "ml-workflow-releases";
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
 const INITIAL_RELEASES: Release[] = [
   {
-    id: 'release-1',
-    version: '7.6.6',
-    targetDate: '2025-12-19',
+    id: "release-1",
+    version: "7.6.6",
+    targetDate: "2025-12-19",
     models: [
-      { id: 'm1', country: 'AUT', segment: 'consumer', included: true, confirmed: false },
-      { id: 'm2', country: 'CZE', segment: 'consumer', included: true, confirmed: false },
-      { id: 'm3', country: 'BEL', segment: 'business', included: true, confirmed: false },
-      { id: 'm4', country: 'FRA', segment: 'consumer', included: true, confirmed: false },
-      { id: 'm5', country: 'DEU', segment: 'consumer', included: true, confirmed: false },
-      { id: 'm6', country: 'ITA', segment: 'business', included: true, confirmed: false },
+      { id: "m1", country: "AUT", segment: "consumer", included: true, confirmed: false },
+      { id: "m2", country: "CZK", segment: "consumer", included: true, confirmed: false },
+      { id: "m3", country: "BEL", segment: "business", included: true, confirmed: false },
+      { id: "m4", country: "FRA", segment: "consumer", included: true, confirmed: false },
+      { id: "m5", country: "DEU", segment: "consumer", included: true, confirmed: false },
+      { id: "m6", country: "ITA", segment: "business", included: true, confirmed: false },
     ],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -48,7 +48,7 @@ export function useReleases() {
       id: generateId(),
       version,
       targetDate,
-      models: models.map(m => ({
+      models: models.map((m) => ({
         id: generateId(),
         country: m.country,
         segment: m.segment,
@@ -65,14 +65,12 @@ export function useReleases() {
   };
 
   const toggleModelInclusion = (releaseId: string, modelId: string) => {
-    const updated = releases.map(release => {
+    const updated = releases.map((release) => {
       if (release.id !== releaseId) return release;
 
       return {
         ...release,
-        models: release.models.map(m => 
-          m.id === modelId ? { ...m, included: !m.included } : m
-        ),
+        models: release.models.map((m) => (m.id === modelId ? { ...m, included: !m.included } : m)),
         updatedAt: new Date().toISOString(),
       };
     });
@@ -81,15 +79,13 @@ export function useReleases() {
   };
 
   const confirmModelInRelease = (releaseId: string, modelId: string, modelIds: ReleaseModelIds) => {
-    const updated = releases.map(release => {
+    const updated = releases.map((release) => {
       if (release.id !== releaseId) return release;
 
       return {
         ...release,
-        models: release.models.map(m => 
-          m.id === modelId 
-            ? { ...m, confirmed: true, modelIds, confirmedAt: new Date().toISOString() } 
-            : m
+        models: release.models.map((m) =>
+          m.id === modelId ? { ...m, confirmed: true, modelIds, confirmedAt: new Date().toISOString() } : m,
         ),
         updatedAt: new Date().toISOString(),
       };
@@ -99,21 +95,24 @@ export function useReleases() {
   };
 
   const addModelToRelease = (releaseId: string, country: string, segment: Segment) => {
-    const updated = releases.map(release => {
+    const updated = releases.map((release) => {
       if (release.id !== releaseId) return release;
 
-      const exists = release.models.some(m => m.country === country && m.segment === segment);
+      const exists = release.models.some((m) => m.country === country && m.segment === segment);
       if (exists) return release;
 
       return {
         ...release,
-        models: [...release.models, {
-          id: generateId(),
-          country,
-          segment,
-          included: true,
-          confirmed: false,
-        }],
+        models: [
+          ...release.models,
+          {
+            id: generateId(),
+            country,
+            segment,
+            included: true,
+            confirmed: false,
+          },
+        ],
         updatedAt: new Date().toISOString(),
       };
     });
@@ -122,12 +121,12 @@ export function useReleases() {
   };
 
   const removeModelFromRelease = (releaseId: string, modelId: string) => {
-    const updated = releases.map(release => {
+    const updated = releases.map((release) => {
       if (release.id !== releaseId) return release;
 
       return {
         ...release,
-        models: release.models.filter(m => m.id !== modelId),
+        models: release.models.filter((m) => m.id !== modelId),
         updatedAt: new Date().toISOString(),
       };
     });
@@ -136,11 +135,11 @@ export function useReleases() {
   };
 
   const deleteRelease = (releaseId: string) => {
-    saveReleases(releases.filter(r => r.id !== releaseId));
+    saveReleases(releases.filter((r) => r.id !== releaseId));
   };
 
   const completeRelease = (releaseId: string) => {
-    const updated = releases.map(release => {
+    const updated = releases.map((release) => {
       if (release.id !== releaseId) return release;
 
       return {
