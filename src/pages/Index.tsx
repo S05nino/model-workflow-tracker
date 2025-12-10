@@ -88,8 +88,8 @@ const Index = () => {
             <div className="flex gap-2">
               <Button
                 variant="outline"
-                onClick={() => {
-                  const fileName = exportDashboardReport(projects, releases);
+                onClick={async () => {
+                  const fileName = await exportDashboardReport(projects, releases);
                   toast.success('Report esportato', {
                     description: `File ${fileName} scaricato`,
                   });
