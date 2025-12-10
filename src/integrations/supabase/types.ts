@@ -14,7 +14,134 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      app_config: {
+        Row: {
+          key: string
+          value: string
+        }
+        Insert: {
+          key: string
+          value: string
+        }
+        Update: {
+          key?: string
+          value?: string
+        }
+        Relationships: []
+      }
+      projects: {
+        Row: {
+          country: string
+          created_at: string
+          current_round: number
+          id: string
+          segment: string
+          status: string
+          test_type: string
+          updated_at: string
+        }
+        Insert: {
+          country: string
+          created_at?: string
+          current_round?: number
+          id?: string
+          segment: string
+          status?: string
+          test_type: string
+          updated_at?: string
+        }
+        Update: {
+          country?: string
+          created_at?: string
+          current_round?: number
+          id?: string
+          segment?: string
+          status?: string
+          test_type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      release_models: {
+        Row: {
+          country: string
+          created_at: string
+          id: string
+          is_confirmed: boolean
+          is_included: boolean
+          model_in_id: string | null
+          model_out_id: string | null
+          release_id: string
+          rules_in_id: string | null
+          rules_out_id: string | null
+          segment: string
+          updated_at: string
+        }
+        Insert: {
+          country: string
+          created_at?: string
+          id?: string
+          is_confirmed?: boolean
+          is_included?: boolean
+          model_in_id?: string | null
+          model_out_id?: string | null
+          release_id: string
+          rules_in_id?: string | null
+          rules_out_id?: string | null
+          segment: string
+          updated_at?: string
+        }
+        Update: {
+          country?: string
+          created_at?: string
+          id?: string
+          is_confirmed?: boolean
+          is_included?: boolean
+          model_in_id?: string | null
+          model_out_id?: string | null
+          release_id?: string
+          rules_in_id?: string | null
+          rules_out_id?: string | null
+          segment?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "release_models_release_id_fkey"
+            columns: ["release_id"]
+            isOneToOne: false
+            referencedRelation: "releases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      releases: {
+        Row: {
+          created_at: string
+          id: string
+          is_completed: boolean
+          target_date: string
+          updated_at: string
+          version: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_completed?: boolean
+          target_date: string
+          updated_at?: string
+          version: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_completed?: boolean
+          target_date?: string
+          updated_at?: string
+          version?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
