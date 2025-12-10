@@ -5,6 +5,56 @@ const STORAGE_KEY = 'ml-workflow-projects';
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
+const INITIAL_PROJECTS: Project[] = [
+  {
+    id: 'austria-1',
+    country: 'Austria',
+    status: 'in-progress',
+    currentRound: 1,
+    rounds: [{
+      id: 'r-austria-1',
+      roundNumber: 1,
+      testType: 'test-suite',
+      currentStep: 4,
+      startedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+    }],
+    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: 'rep-ceca-1',
+    country: 'Rep. Ceca',
+    status: 'waiting',
+    currentRound: 1,
+    rounds: [{
+      id: 'r-rep-ceca-1',
+      roundNumber: 1,
+      testType: 'test-suite',
+      currentStep: 6,
+      startedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+      completedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+    }],
+    createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+    awaitingConfirmation: true,
+  },
+  {
+    id: 'belgio-1',
+    country: 'Belgio',
+    status: 'in-progress',
+    currentRound: 1,
+    rounds: [{
+      id: 'r-belgio-1',
+      roundNumber: 1,
+      testType: 'categorization',
+      currentStep: 1,
+      startedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+    }],
+    createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+  },
+];
+
 export function useProjects() {
   const [projects, setProjects] = useState<Project[]>([]);
 
@@ -12,6 +62,10 @@ export function useProjects() {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       setProjects(JSON.parse(stored));
+    } else {
+      // Load initial demo projects
+      setProjects(INITIAL_PROJECTS);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_PROJECTS));
     }
   }, []);
 
@@ -20,7 +74,7 @@ export function useProjects() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(newProjects));
   };
 
-  const addProject = (country: string, clientName: string, testType: TestType) => {
+  const addProject = (country: string, testType: TestType) => {
     const now = new Date().toISOString();
     const newRound: WorkflowRound = {
       id: generateId(),
@@ -33,7 +87,6 @@ export function useProjects() {
     const newProject: Project = {
       id: generateId(),
       country,
-      clientName,
       status: 'in-progress',
       currentRound: 1,
       rounds: [newRound],

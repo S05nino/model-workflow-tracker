@@ -7,7 +7,6 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -21,21 +20,19 @@ import { COUNTRIES, TestType } from '@/types/project';
 import { Plus } from 'lucide-react';
 
 interface NewProjectDialogProps {
-  onAdd: (country: string, clientName: string, testType: TestType) => void;
+  onAdd: (country: string, testType: TestType) => void;
 }
 
 export function NewProjectDialog({ onAdd }: NewProjectDialogProps) {
   const [open, setOpen] = useState(false);
   const [country, setCountry] = useState('');
-  const [clientName, setClientName] = useState('');
   const [testType, setTestType] = useState<TestType>('categorization');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (country && clientName) {
-      onAdd(country, clientName, testType);
+    if (country) {
+      onAdd(country, testType);
       setCountry('');
-      setClientName('');
       setTestType('categorization');
       setOpen(false);
     }
@@ -71,16 +68,6 @@ export function NewProjectDialog({ onAdd }: NewProjectDialogProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="clientName">Nome Cliente</Label>
-            <Input
-              id="clientName"
-              value={clientName}
-              onChange={(e) => setClientName(e.target.value)}
-              placeholder="Es. Azienda XYZ"
-            />
-          </div>
-
-          <div className="space-y-2">
             <Label>Tipo di Test</Label>
             <RadioGroup 
               value={testType} 
@@ -102,7 +89,7 @@ export function NewProjectDialog({ onAdd }: NewProjectDialogProps) {
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Annulla
             </Button>
-            <Button type="submit" disabled={!country || !clientName}>
+            <Button type="submit" disabled={!country}>
               Crea Progetto
             </Button>
           </div>

@@ -28,24 +28,24 @@ const Index = () => {
     return true;
   });
 
-  const handleAddProject = (country: string, clientName: string, testType: 'categorization' | 'test-suite') => {
-    addProject(country, clientName, testType);
+  const handleAddProject = (country: string, testType: 'categorization' | 'test-suite') => {
+    addProject(country, testType);
     toast.success('Progetto creato', {
-      description: `${clientName} (${country}) aggiunto con successo`,
+      description: `${country} aggiunto con successo`,
     });
   };
 
-  const handleConfirmProject = (projectId: string, clientName: string) => {
+  const handleConfirmProject = (projectId: string, country: string) => {
     confirmProject(projectId);
     toast.success('Modello confermato!', {
-      description: `Il modello per ${clientName} è stato approvato`,
+      description: `Il modello per ${country} è stato approvato`,
     });
   };
 
-  const handleDeleteProject = (projectId: string, clientName: string) => {
+  const handleDeleteProject = (projectId: string, country: string) => {
     deleteProject(projectId);
     toast.info('Progetto eliminato', {
-      description: `${clientName} rimosso dalla lista`,
+      description: `${country} rimosso dalla lista`,
     });
   };
 
@@ -114,9 +114,9 @@ const Index = () => {
                   project={project}
                   onUpdateStep={(step) => updateProjectStep(project.id, step)}
                   onStartNewRound={(testType) => startNewRound(project.id, testType)}
-                  onConfirm={() => handleConfirmProject(project.id, project.clientName)}
+                  onConfirm={() => handleConfirmProject(project.id, project.country)}
                   onUpdateStatus={(status) => updateProjectStatus(project.id, status)}
-                  onDelete={() => handleDeleteProject(project.id, project.clientName)}
+                  onDelete={() => handleDeleteProject(project.id, project.country)}
                 />
               ))}
             </div>
