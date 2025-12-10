@@ -1,11 +1,127 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { useState } from 'react';
+import { useProjects } from '@/hooks/useProjects';
+import { ProjectCard } from '@/components/ProjectCard';
+import { NewProjectDialog } from '@/components/NewProjectDialog';
+import { DashboardStats } from '@/components/DashboardStats';
+import { FilterBar } from '@/components/FilterBar';
+import { ProjectStatus } from '@/types/project';
+import { Brain, Workflow } from 'lucide-react';
+import { toast } from 'sonner';
 
 const Index = () => {
+  const {
+    projects,
+    addProject,
+    updateProjectStep,
+    startNewRound,
+    confirmProject,
+    updateProjectStatus,
+    deleteProject,
+  } = useProjects();
+
+  const [statusFilter, setStatusFilter] = useState<ProjectStatus | 'all'>('all');
+  const [countryFilter, setCountryFilter] = useState<string | 'all'>('all');
+
+  const filteredProjects = projects.filter((project) => {
+    if (statusFilter !== 'all' && project.status !== statusFilter) return false;
+    if (countryFilter !== 'all' && project.country !== countryFilter) return false;
+    return true;
+  });
+
+  const handleAddProject = (country: string, clientName: string, testType: 'categorization' | 'test-suite') => {
+    addProject(country, clientName, testType);
+    toast.success('Progetto creato', {
+      description: `${clientName} (${country}) aggiunto con successo`,
+    });
+  };
+
+  const handleConfirmProject = (projectId: string, clientName: string) => {
+    confirmProject(projectId);
+    toast.success('Modello confermato!', {
+      description: `Il modello per ${clientName} è stato approvato`,
+    });
+  };
+
+  const handleDeleteProject = (projectId: string, clientName: string) => {
+    deleteProject(projectId);
+    toast.info('Progetto eliminato', {
+      description: `${clientName} rimosso dalla lista`,
+    });
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
+    <div className="min-h-screen bg-background">
+      <div className="container mx-auto px-4 py-8 max-w-7xl">
+        {/* Header */}
+        <header className="mb-8 animate-fade-in">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-xl bg-primary/10 glow-primary">
+                <Brain className="w-8 h-8 text-primary" />
+              </div>
+              <div>
+                <h1 className="text-2xl md:text-3xl font-bold text-foreground">
+                  ML Workflow Tracker
+                </h1>
+                <p className="text-muted-foreground flex items-center gap-2">
+                  <Workflow className="w-4 h-4" />
+                  Gestione fine-tuning modelli
+                </p>
+              </div>
+            </div>
+            <NewProjectDialog onAdd={handleAddProject} />
+          </div>
+        </header>
+
+        {/* Stats */}
+        <section className="mb-8 animate-fade-in" style={{ animationDelay: '0.1s' }}>
+          <DashboardStats projects={projects} />
+        </section>
+
+        {/* Filters */}
+        <section className="mb-6 animate-fade-in" style={{ animationDelay: '0.2s' }}>
+          <FilterBar
+            statusFilter={statusFilter}
+            countryFilter={countryFilter}
+            onStatusChange={setStatusFilter}
+            onCountryChange={setCountryFilter}
+            onClearFilters={() => {
+              setStatusFilter('all');
+              setCountryFilter('all');
+            }}
+          />
+        </section>
+
+        {/* Projects Grid */}
+        <section className="animate-fade-in" style={{ animationDelay: '0.3s' }}>
+          {filteredProjects.length === 0 ? (
+            <div className="text-center py-16 glass-card rounded-xl">
+              <Brain className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
+              <h3 className="text-xl font-semibold text-foreground mb-2">
+                {projects.length === 0 ? 'Nessun progetto' : 'Nessun risultato'}
+              </h3>
+              <p className="text-muted-foreground">
+                {projects.length === 0
+                  ? 'Crea il tuo primo progetto per iniziare a tracciare i workflow'
+                  : 'Prova a modificare i filtri di ricerca'}
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {filteredProjects.map((project) => (
+                <ProjectCard
+                  key={project.id}
+                  project={project}
+                  onUpdateStep={(step) => updateProjectStep(project.id, step)}
+                  onStartNewRound={(testType) => startNewRound(project.id, testType)}
+                  onConfirm={() => handleConfirmProject(project.id, project.clientName)}
+                  onUpdateStatus={(status) => updateProjectStatus(project.id, status)}
+                  onDelete={() => handleDeleteProject(project.id, project.clientName)}
+                />
+              ))}
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );

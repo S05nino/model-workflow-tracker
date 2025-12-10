@@ -1,0 +1,184 @@
+import { Project, WorkflowStep, TestType } from '@/types/project';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { StatusBadge } from './StatusBadge';
+import { WorkflowProgress } from './WorkflowProgress';
+import { Badge } from '@/components/ui/badge';
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger,
+  DropdownMenuSeparator
+} from '@/components/ui/dropdown-menu';
+import { 
+  MoreVertical, 
+  Plus, 
+  CheckCircle2, 
+  ChevronRight,
+  Globe,
+  Calendar,
+  RefreshCw,
+  Trash2,
+  Pause,
+  Play
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { formatDistanceToNow } from 'date-fns';
+import { it } from 'date-fns/locale';
+
+interface ProjectCardProps {
+  project: Project;
+  onUpdateStep: (step: WorkflowStep) => void;
+  onStartNewRound: (testType: TestType) => void;
+  onConfirm: () => void;
+  onUpdateStatus: (status: Project['status']) => void;
+  onDelete: () => void;
+}
+
+export function ProjectCard({
+  project,
+  onUpdateStep,
+  onStartNewRound,
+  onConfirm,
+  onUpdateStatus,
+  onDelete,
+}: ProjectCardProps) {
+  const currentRoundData = project.rounds.find(r => r.roundNumber === project.currentRound);
+  const isRoundCompleted = currentRoundData?.currentStep === 6;
+  const isProjectCompleted = project.status === 'completed';
+
+  const handleAdvanceStep = () => {
+    if (currentRoundData && currentRoundData.currentStep < 6) {
+      onUpdateStep((currentRoundData.currentStep + 1) as WorkflowStep);
+    }
+  };
+
+  return (
+    <Card className={cn(
+      "glass-card animate-slide-up transition-all duration-300 hover:shadow-xl",
+      isProjectCompleted && "opacity-75"
+    )}>
+      <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <Globe className="w-4 h-4 text-primary" />
+            <span className="font-mono text-sm text-muted-foreground">{project.country}</span>
+          </div>
+          <h3 className="font-semibold text-lg text-foreground">{project.clientName}</h3>
+        </div>
+        <div className="flex items-center gap-2">
+          <StatusBadge status={project.status} />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <MoreVertical className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {project.status === 'in-progress' && (
+                <DropdownMenuItem onClick={() => onUpdateStatus('on-hold')}>
+                  <Pause className="w-4 h-4 mr-2" />
+                  Metti in pausa
+                </DropdownMenuItem>
+              )}
+              {project.status === 'on-hold' && (
+                <DropdownMenuItem onClick={() => onUpdateStatus('in-progress')}>
+                  <Play className="w-4 h-4 mr-2" />
+                  Riprendi
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem 
+                onClick={onDelete}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Elimina
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </CardHeader>
+
+      <CardContent className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <RefreshCw className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">
+              Round {project.currentRound}
+            </span>
+            {currentRoundData && (
+              <Badge variant={currentRoundData.testType === 'categorization' ? 'info' : 'warning'}>
+                {currentRoundData.testType === 'categorization' ? 'Categorizzazione' : 'Test Suite'}
+              </Badge>
+            )}
+          </div>
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Calendar className="w-3 h-3" />
+            {formatDistanceToNow(new Date(project.updatedAt), { addSuffix: true, locale: it })}
+          </div>
+        </div>
+
+        <div className="py-2">
+          <WorkflowProgress 
+            currentStep={currentRoundData?.currentStep || 1}
+            isCompleted={isRoundCompleted}
+            onStepClick={onUpdateStep}
+            interactive={!isProjectCompleted && project.status === 'in-progress'}
+          />
+        </div>
+
+        {!isProjectCompleted && project.status === 'in-progress' && (
+          <div className="flex gap-2 pt-2">
+            {!isRoundCompleted ? (
+              <Button 
+                onClick={handleAdvanceStep}
+                className="flex-1 gap-2"
+                size="sm"
+              >
+                Prossimo Step
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            ) : (
+              <>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="flex-1 gap-2">
+                      <Plus className="w-4 h-4" />
+                      Nuovo Round
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem onClick={() => onStartNewRound('categorization')}>
+                      Categorizzazione
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onStartNewRound('test-suite')}>
+                      Test Suite Completa
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Button 
+                  onClick={onConfirm}
+                  variant="default"
+                  size="sm"
+                  className="flex-1 gap-2 bg-success hover:bg-success/90"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  Conferma Modello
+                </Button>
+              </>
+            )}
+          </div>
+        )}
+
+        {isProjectCompleted && (
+          <div className="flex items-center justify-center gap-2 py-2 text-success">
+            <CheckCircle2 className="w-5 h-5" />
+            <span className="font-medium">Modello Confermato</span>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
