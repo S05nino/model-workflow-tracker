@@ -1,4 +1,4 @@
-import { Project, WorkflowStep, TestType, COUNTRIES, SEGMENT_LABELS, TEST_TYPE_LABELS, getTestTypesForSegment } from '@/types/project';
+import { Project, WorkflowStep, TestType, COUNTRIES, SEGMENT_LABELS, TEST_TYPE_LABELS, WORKFLOW_STEPS, getTestTypesForSegment } from '@/types/project';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from './StatusBadge';
@@ -45,15 +45,16 @@ export function ProjectCard({
   onDelete,
 }: ProjectCardProps) {
   const currentRoundData = project.rounds.find(r => r.roundNumber === project.currentRound);
-  const isRoundCompleted = currentRoundData?.currentStep === 6;
+  const isRoundCompleted = currentRoundData?.currentStep === 4;
   const isProjectCompleted = project.status === 'completed';
   
   const countryConfig = COUNTRIES.find(c => c.code === project.country);
   const countryName = countryConfig?.name || project.country;
   const availableTestTypes = getTestTypesForSegment(project.segment);
+  const currentStepLabel = currentRoundData ? WORKFLOW_STEPS[currentRoundData.currentStep]?.label : '';
 
   const handleAdvanceStep = () => {
-    if (currentRoundData && currentRoundData.currentStep < 6) {
+    if (currentRoundData && currentRoundData.currentStep < 4) {
       onUpdateStep((currentRoundData.currentStep + 1) as WorkflowStep);
     }
   };
@@ -80,7 +81,7 @@ export function ProjectCard({
               </Badge>
             ) : currentRoundData && !isProjectCompleted && (
               <Badge variant="secondary" className="text-xs">
-                Step {currentRoundData.currentStep}/6
+                {currentStepLabel}
               </Badge>
             )}
           </div>
