@@ -70,13 +70,17 @@ export function ProjectCard({
             <h3 className="font-semibold text-lg text-foreground">{countryName}</h3>
             <span className="font-mono text-xs text-muted-foreground">({project.country})</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Badge variant="outline" className="text-xs">
               {SEGMENT_LABELS[project.segment]}
             </Badge>
-            {project.awaitingConfirmation && (
+            {project.awaitingConfirmation ? (
               <Badge variant="warning" className="text-xs">
                 In attesa di conferma
+              </Badge>
+            ) : currentRoundData && !isProjectCompleted && (
+              <Badge variant="secondary" className="text-xs">
+                Step {currentRoundData.currentStep}/6
               </Badge>
             )}
           </div>
