@@ -63,9 +63,13 @@ export function ProjectCard({
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <Globe className="w-4 h-4 text-primary" />
-            <span className="font-mono text-sm text-muted-foreground">{project.country}</span>
+            <h3 className="font-semibold text-lg text-foreground">{project.country}</h3>
           </div>
-          <h3 className="font-semibold text-lg text-foreground">{project.clientName}</h3>
+          {project.awaitingConfirmation && (
+            <Badge variant="warning" className="text-xs">
+              In attesa di conferma modello
+            </Badge>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge status={project.status} />

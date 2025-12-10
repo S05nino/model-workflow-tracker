@@ -17,13 +17,13 @@ export interface WorkflowRound {
 export interface Project {
   id: string;
   country: string;
-  clientName: string;
   status: ProjectStatus;
   currentRound: number;
   rounds: WorkflowRound[];
   createdAt: string;
   updatedAt: string;
   confirmedAt?: string;
+  awaitingConfirmation?: boolean;
 }
 
 export const WORKFLOW_STEPS: Record<WorkflowStep, { label: string; description: string }> = {
@@ -36,14 +36,15 @@ export const WORKFLOW_STEPS: Record<WorkflowStep, { label: string; description: 
 };
 
 export const COUNTRIES = [
-  'Italia',
+  'Austria',
+  'Belgio',
   'Francia',
   'Germania',
-  'Spagna',
-  'Regno Unito',
-  'Portogallo',
+  'Italia',
   'Olanda',
-  'Belgio',
+  'Portogallo',
+  'Regno Unito',
+  'Rep. Ceca',
+  'Spagna',
   'Svizzera',
-  'Austria',
 ];
