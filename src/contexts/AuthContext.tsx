@@ -28,17 +28,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (password: string): Promise<boolean> => {
     try {
       const { data, error } = await supabase
-        .from("app_config")
-        .select("value")
-        .eq("key", "shared_password")
-        .maybeSingle();
+        .rpc("validate_shared_password", { input_password: password });
 
       if (error) {
         console.error("Error checking password:", error);
         return false;
       }
 
-      if (data && data.value === password) {
+      if (data === true) {
         setIsAuthenticated(true);
         localStorage.setItem(AUTH_STORAGE_KEY, "true");
         return true;
