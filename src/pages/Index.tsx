@@ -4,9 +4,11 @@ import { ProjectCard } from '@/components/ProjectCard';
 import { NewProjectDialog } from '@/components/NewProjectDialog';
 import { DashboardStats } from '@/components/DashboardStats';
 import { FilterBar } from '@/components/FilterBar';
+import { ReleasesSection } from '@/components/ReleasesSection';
 import { ProjectStatus, Segment, TestType, COUNTRIES } from '@/types/project';
 import { Brain, Workflow } from 'lucide-react';
 import { toast } from 'sonner';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const Index = () => {
   const {
@@ -79,50 +81,60 @@ const Index = () => {
           <DashboardStats projects={projects} />
         </section>
 
-        {/* Filters */}
-        <section className="mb-6 animate-fade-in" style={{ animationDelay: '0.2s' }}>
-          <FilterBar
-            statusFilter={statusFilter}
-            countryFilter={countryFilter}
-            onStatusChange={setStatusFilter}
-            onCountryChange={setCountryFilter}
-            onClearFilters={() => {
-              setStatusFilter('all');
-              setCountryFilter('all');
-            }}
-          />
-        </section>
+        {/* Tabs for Projects and Releases */}
+        <Tabs defaultValue="projects" className="animate-fade-in" style={{ animationDelay: '0.2s' }}>
+          <TabsList className="mb-6">
+            <TabsTrigger value="projects">Progetti</TabsTrigger>
+            <TabsTrigger value="releases">Rilasci</TabsTrigger>
+          </TabsList>
 
-        {/* Projects Grid */}
-        <section className="animate-fade-in" style={{ animationDelay: '0.3s' }}>
-          {filteredProjects.length === 0 ? (
-            <div className="text-center py-16 glass-card rounded-xl">
-              <Brain className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
-              <h3 className="text-xl font-semibold text-foreground mb-2">
-                {projects.length === 0 ? 'Nessun progetto' : 'Nessun risultato'}
-              </h3>
-              <p className="text-muted-foreground">
-                {projects.length === 0
-                  ? 'Crea il tuo primo progetto per iniziare a tracciare i workflow'
-                  : 'Prova a modificare i filtri di ricerca'}
-              </p>
-            </div>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {filteredProjects.map((project) => (
-                <ProjectCard
-                  key={project.id}
-                  project={project}
-                  onUpdateStep={(step) => updateProjectStep(project.id, step)}
-                  onStartNewRound={(testType) => startNewRound(project.id, testType)}
-                  onConfirm={() => handleConfirmProject(project.id, project.country)}
-                  onUpdateStatus={(status) => updateProjectStatus(project.id, status)}
-                  onDelete={() => handleDeleteProject(project.id, project.country)}
-                />
-              ))}
-            </div>
-          )}
-        </section>
+          <TabsContent value="projects" className="space-y-6">
+            {/* Filters */}
+            <FilterBar
+              statusFilter={statusFilter}
+              countryFilter={countryFilter}
+              onStatusChange={setStatusFilter}
+              onCountryChange={setCountryFilter}
+              onClearFilters={() => {
+                setStatusFilter('all');
+                setCountryFilter('all');
+              }}
+            />
+
+            {/* Projects Grid */}
+            {filteredProjects.length === 0 ? (
+              <div className="text-center py-16 glass-card rounded-xl">
+                <Brain className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
+                <h3 className="text-xl font-semibold text-foreground mb-2">
+                  {projects.length === 0 ? 'Nessun progetto' : 'Nessun risultato'}
+                </h3>
+                <p className="text-muted-foreground">
+                  {projects.length === 0
+                    ? 'Crea il tuo primo progetto per iniziare a tracciare i workflow'
+                    : 'Prova a modificare i filtri di ricerca'}
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {filteredProjects.map((project) => (
+                  <ProjectCard
+                    key={project.id}
+                    project={project}
+                    onUpdateStep={(step) => updateProjectStep(project.id, step)}
+                    onStartNewRound={(testType) => startNewRound(project.id, testType)}
+                    onConfirm={() => handleConfirmProject(project.id, project.country)}
+                    onUpdateStatus={(status) => updateProjectStatus(project.id, status)}
+                    onDelete={() => handleDeleteProject(project.id, project.country)}
+                  />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="releases">
+            <ReleasesSection />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
