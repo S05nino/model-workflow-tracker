@@ -24,8 +24,16 @@ const Index = () => {
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | 'all'>('all');
   const [countryFilter, setCountryFilter] = useState<string | 'all'>('all');
 
-  const filteredProjects = projects.filter((project) => {
+  const activeProjects = projects.filter(p => p.status !== 'completed');
+  const completedProjects = projects.filter(p => p.status === 'completed');
+
+  const filteredActiveProjects = activeProjects.filter((project) => {
     if (statusFilter !== 'all' && project.status !== statusFilter) return false;
+    if (countryFilter !== 'all' && project.country !== countryFilter) return false;
+    return true;
+  });
+
+  const filteredCompletedProjects = completedProjects.filter((project) => {
     if (countryFilter !== 'all' && project.country !== countryFilter) return false;
     return true;
   });
@@ -102,7 +110,7 @@ const Index = () => {
             />
 
             {/* Projects Grid */}
-            {filteredProjects.length === 0 ? (
+            {filteredActiveProjects.length === 0 && filteredCompletedProjects.length === 0 ? (
               <div className="text-center py-16 glass-card rounded-xl">
                 <Brain className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
                 <h3 className="text-xl font-semibold text-foreground mb-2">
@@ -115,18 +123,50 @@ const Index = () => {
                 </p>
               </div>
             ) : (
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {filteredProjects.map((project) => (
-                  <ProjectCard
-                    key={project.id}
-                    project={project}
-                    onUpdateStep={(step) => updateProjectStep(project.id, step)}
-                    onStartNewRound={(testType) => startNewRound(project.id, testType)}
-                    onConfirm={() => handleConfirmProject(project.id, project.country)}
-                    onUpdateStatus={(status) => updateProjectStatus(project.id, status)}
-                    onDelete={() => handleDeleteProject(project.id, project.country)}
-                  />
-                ))}
+              <div className="space-y-8">
+                {/* Active Projects */}
+                {filteredActiveProjects.length > 0 && (
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                      In Corso ({filteredActiveProjects.length})
+                    </h3>
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                      {filteredActiveProjects.map((project) => (
+                        <ProjectCard
+                          key={project.id}
+                          project={project}
+                          onUpdateStep={(step) => updateProjectStep(project.id, step)}
+                          onStartNewRound={(testType) => startNewRound(project.id, testType)}
+                          onConfirm={() => handleConfirmProject(project.id, project.country)}
+                          onUpdateStatus={(status) => updateProjectStatus(project.id, status)}
+                          onDelete={() => handleDeleteProject(project.id, project.country)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Completed Projects */}
+                {filteredCompletedProjects.length > 0 && (
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                      Completati ({filteredCompletedProjects.length})
+                    </h3>
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                      {filteredCompletedProjects.map((project) => (
+                        <ProjectCard
+                          key={project.id}
+                          project={project}
+                          onUpdateStep={(step) => updateProjectStep(project.id, step)}
+                          onStartNewRound={(testType) => startNewRound(project.id, testType)}
+                          onConfirm={() => handleConfirmProject(project.id, project.country)}
+                          onUpdateStatus={(status) => updateProjectStatus(project.id, status)}
+                          onDelete={() => handleDeleteProject(project.id, project.country)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </TabsContent>
