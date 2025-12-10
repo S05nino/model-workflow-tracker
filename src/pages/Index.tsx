@@ -1,14 +1,17 @@
 import { useState } from 'react';
 import { useProjects } from '@/hooks/useProjects';
+import { useReleases } from '@/hooks/useReleases';
 import { ProjectCard } from '@/components/ProjectCard';
 import { NewProjectDialog } from '@/components/NewProjectDialog';
 import { DashboardStats } from '@/components/DashboardStats';
 import { FilterBar } from '@/components/FilterBar';
 import { ReleasesSection } from '@/components/ReleasesSection';
 import { ProjectStatus, Segment, TestType, COUNTRIES } from '@/types/project';
-import { Brain, Workflow } from 'lucide-react';
+import { Brain, Workflow, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+import { exportDashboardReport } from '@/lib/exportReport';
 
 const Index = () => {
   const {
@@ -20,6 +23,8 @@ const Index = () => {
     updateProjectStatus,
     deleteProject,
   } = useProjects();
+
+  const { releases } = useReleases();
 
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | 'all'>('all');
   const [countryFilter, setCountryFilter] = useState<string | 'all'>('all');
@@ -80,7 +85,21 @@ const Index = () => {
                 </p>
               </div>
             </div>
-            <NewProjectDialog onAdd={handleAddProject} />
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const fileName = exportDashboardReport(projects, releases);
+                  toast.success('Report esportato', {
+                    description: `File ${fileName} scaricato`,
+                  });
+                }}
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Esporta Report
+              </Button>
+              <NewProjectDialog onAdd={handleAddProject} />
+            </div>
           </div>
         </header>
 
