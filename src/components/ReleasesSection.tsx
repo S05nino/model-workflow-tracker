@@ -5,6 +5,7 @@ import { Segment } from '@/types/project';
 import { ReleaseModelIds } from '@/types/release';
 import { Package } from 'lucide-react';
 import { toast } from 'sonner';
+import { parseISO, compareAsc } from 'date-fns';
 
 export function ReleasesSection() {
   const {
@@ -42,8 +43,13 @@ export function ReleasesSection() {
     });
   };
 
-  const activeReleases = releases.filter(r => !r.completed);
-  const completedReleases = releases.filter(r => r.completed);
+  const activeReleases = releases
+    .filter(r => !r.completed)
+    .sort((a, b) => compareAsc(parseISO(a.targetDate), parseISO(b.targetDate)));
+  
+  const completedReleases = releases
+    .filter(r => r.completed)
+    .sort((a, b) => compareAsc(parseISO(b.targetDate), parseISO(a.targetDate)));
 
   return (
     <section className="space-y-6">
