@@ -3,14 +3,13 @@ import { ReleaseCard } from './ReleaseCard';
 import { NewReleaseDialog } from './NewReleaseDialog';
 import { Segment } from '@/types/project';
 import { ReleaseModelIds } from '@/types/release';
-import { Package, Loader2 } from 'lucide-react';
+import { Package } from 'lucide-react';
 import { toast } from 'sonner';
 import { parseISO, compareAsc } from 'date-fns';
 
 export function ReleasesSection() {
   const {
     releases,
-    isLoading,
     addRelease,
     toggleModelInclusion,
     confirmModelInRelease,
@@ -69,11 +68,7 @@ export function ReleasesSection() {
         <NewReleaseDialog onAdd={handleAddRelease} />
       </div>
 
-      {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      ) : releases.length === 0 ? (
+      {releases.length === 0 ? (
         <div className="text-center py-12 glass-card rounded-xl">
           <Package className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-50" />
           <h3 className="text-lg font-semibold text-foreground mb-2">
