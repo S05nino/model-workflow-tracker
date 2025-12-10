@@ -1,18 +1,22 @@
 import { useState } from 'react';
 import { useProjects } from '@/hooks/useProjects';
+import { useAuth } from '@/contexts/AuthContext';
 import { ProjectCard } from '@/components/ProjectCard';
 import { NewProjectDialog } from '@/components/NewProjectDialog';
 import { DashboardStats } from '@/components/DashboardStats';
 import { FilterBar } from '@/components/FilterBar';
 import { ReleasesSection } from '@/components/ReleasesSection';
 import { ProjectStatus, Segment, TestType, COUNTRIES } from '@/types/project';
-import { Brain, Workflow } from 'lucide-react';
+import { Brain, Workflow, LogOut, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
 
 const Index = () => {
+  const { logout } = useAuth();
   const {
     projects,
+    isLoading,
     addProject,
     updateProjectStep,
     startNewRound,
@@ -80,14 +84,25 @@ const Index = () => {
                 </p>
               </div>
             </div>
-            <NewProjectDialog onAdd={handleAddProject} />
+            <div className="flex items-center gap-2">
+              <NewProjectDialog onAdd={handleAddProject} />
+              <Button variant="outline" size="icon" onClick={logout} title="Esci">
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </header>
 
-        {/* Stats */}
-        <section className="mb-8 animate-fade-in" style={{ animationDelay: '0.1s' }}>
-          <DashboardStats projects={projects} />
-        </section>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : (
+          <>
+            {/* Stats */}
+            <section className="mb-8 animate-fade-in" style={{ animationDelay: '0.1s' }}>
+              <DashboardStats projects={projects} />
+            </section>
 
         {/* Tabs for Projects and Releases */}
         <Tabs defaultValue="projects" className="animate-fade-in" style={{ animationDelay: '0.2s' }}>
@@ -171,10 +186,12 @@ const Index = () => {
             )}
           </TabsContent>
 
-          <TabsContent value="releases">
-            <ReleasesSection />
-          </TabsContent>
-        </Tabs>
+            <TabsContent value="releases">
+              <ReleasesSection />
+            </TabsContent>
+          </Tabs>
+          </>
+        )}
       </div>
     </div>
   );
