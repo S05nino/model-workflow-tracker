@@ -180,13 +180,15 @@ export function ReleaseCard({
 
                       <div className="flex items-center gap-2">
                         {model.confirmed && model.modelIds && (
-                          <div className="text-xs text-muted-foreground text-right mr-2">
-                            {model.modelIds.modelOut && <span className="block">Out: {model.modelIds.modelOut}</span>}
-                            {model.modelIds.modelIn && <span className="block">In: {model.modelIds.modelIn}</span>}
+                          <div className="text-xs text-muted-foreground text-right mr-2 space-y-0.5">
+                            {model.modelIds.modelOut && <span className="block">Model Out: {model.modelIds.modelOut}</span>}
+                            {model.modelIds.modelIn && <span className="block">Model In: {model.modelIds.modelIn}</span>}
+                            {model.modelIds.rulesOut && <span className="block">Rules Out: {model.modelIds.rulesOut}</span>}
+                            {model.modelIds.rulesIn && <span className="block">Rules In: {model.modelIds.rulesIn}</span>}
                           </div>
                         )}
                         
-                        {!release.completed && (
+                        {!release.completed && !allConfirmed && (
                           <>
                             {model.included && !model.confirmed && (
                               <Button
@@ -202,13 +204,15 @@ export function ReleaseCard({
                               </Button>
                             )}
                             
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => onToggleInclusion(model.id)}
-                            >
-                              {model.included ? 'Escludi' : 'Includi'}
-                            </Button>
+                            {!model.confirmed && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => onToggleInclusion(model.id)}
+                              >
+                                {model.included ? 'Escludi' : 'Includi'}
+                              </Button>
+                            )}
                           </>
                         )}
                       </div>
@@ -217,7 +221,7 @@ export function ReleaseCard({
                 })}
               </div>
               
-              {!release.completed && (
+              {!release.completed && !allConfirmed && (
                 <div className="mt-4 pt-4 border-t">
                   <AddModelToReleaseDialog
                     existingModels={release.models}
