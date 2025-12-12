@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { 
-  COUNTRIES, 
+  CountryConfig,
   Segment, 
   TestType, 
   SEGMENT_LABELS, 
@@ -28,15 +28,16 @@ import { Plus } from 'lucide-react';
 
 interface NewProjectDialogProps {
   onAdd: (country: string, segment: Segment, testType: TestType) => void;
+  countries: CountryConfig[];
 }
 
-export function NewProjectDialog({ onAdd }: NewProjectDialogProps) {
+export function NewProjectDialog({ onAdd, countries }: NewProjectDialogProps) {
   const [open, setOpen] = useState(false);
   const [countryCode, setCountryCode] = useState('');
   const [segment, setSegment] = useState<Segment | ''>('');
   const [testType, setTestType] = useState<TestType | ''>('');
 
-  const selectedCountry = COUNTRIES.find(c => c.code === countryCode);
+  const selectedCountry = countries.find(c => c.code === countryCode);
   const availableSegments = selectedCountry?.segments || [];
   const availableTestTypes = segment ? getTestTypesForSegment(segment) : [];
 
@@ -83,7 +84,7 @@ export function NewProjectDialog({ onAdd }: NewProjectDialogProps) {
                 <SelectValue placeholder="Seleziona paese" />
               </SelectTrigger>
               <SelectContent>
-                {COUNTRIES.map((c) => (
+                {countries.map((c) => (
                   <SelectItem key={c.code} value={c.code}>
                     {c.name} ({c.code})
                   </SelectItem>

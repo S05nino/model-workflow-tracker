@@ -1,4 +1,4 @@
-import { Project, WorkflowStep, TestType, COUNTRIES, SEGMENT_LABELS, TEST_TYPE_LABELS, WORKFLOW_STEPS, getTestTypesForSegment } from '@/types/project';
+import { Project, WorkflowStep, TestType, CountryConfig, SEGMENT_LABELS, TEST_TYPE_LABELS, WORKFLOW_STEPS, getTestTypesForSegment } from '@/types/project';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from './StatusBadge';
@@ -29,6 +29,7 @@ import { it } from 'date-fns/locale';
 
 interface ProjectCardProps {
   project: Project;
+  countries: CountryConfig[];
   onUpdateStep: (step: WorkflowStep) => void;
   onStartNewRound: (testType: TestType) => void;
   onConfirm: () => void;
@@ -38,6 +39,7 @@ interface ProjectCardProps {
 
 export function ProjectCard({
   project,
+  countries,
   onUpdateStep,
   onStartNewRound,
   onConfirm,
@@ -48,7 +50,7 @@ export function ProjectCard({
   const isRoundCompleted = currentRoundData?.currentStep === 5;
   const isProjectCompleted = project.status === 'completed';
   
-  const countryConfig = COUNTRIES.find(c => c.code === project.country);
+  const countryConfig = countries.find(c => c.code === project.country);
   const countryName = countryConfig?.name || project.country;
   const availableTestTypes = getTestTypesForSegment(project.segment);
   const currentStepLabel = currentRoundData ? WORKFLOW_STEPS[currentRoundData.currentStep]?.label : '';

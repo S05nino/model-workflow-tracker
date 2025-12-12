@@ -13,13 +13,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Plus } from 'lucide-react';
-import { COUNTRIES, Segment, SEGMENT_LABELS } from '@/types/project';
+import { CountryConfig, Segment, SEGMENT_LABELS } from '@/types/project';
 
 interface NewReleaseDialogProps {
   onAdd: (version: string, targetDate: string, models: { country: string; segment: Segment }[]) => void;
+  countries: CountryConfig[];
 }
 
-export function NewReleaseDialog({ onAdd }: NewReleaseDialogProps) {
+export function NewReleaseDialog({ onAdd, countries }: NewReleaseDialogProps) {
   const [open, setOpen] = useState(false);
   const [version, setVersion] = useState('');
   const [targetDate, setTargetDate] = useState('');
@@ -90,7 +91,7 @@ export function NewReleaseDialog({ onAdd }: NewReleaseDialogProps) {
           <div className="grid gap-2">
             <Label>Modelli da includere</Label>
             <div className="grid gap-2 max-h-64 overflow-y-auto border rounded-lg p-3">
-              {COUNTRIES.map((country) => (
+              {countries.map((country) => (
                 <div key={country.code} className="space-y-1">
                   <p className="font-medium text-sm text-foreground">{country.name}</p>
                   <div className="flex flex-wrap gap-2 pl-4">
