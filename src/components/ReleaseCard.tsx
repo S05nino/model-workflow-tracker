@@ -55,7 +55,7 @@ export function ReleaseCard({
   onDelete,
   onComplete,
 }: ReleaseCardProps) {
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
   const [confirmingModel, setConfirmingModel] = useState<{
     id: string;
     country: string;
