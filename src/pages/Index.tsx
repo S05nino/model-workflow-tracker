@@ -41,6 +41,7 @@ const Index = () => {
   });
 
   const filteredCompletedProjects = completedProjects.filter((project) => {
+    if (statusFilter !== 'all' && statusFilter !== 'completed') return false;
     if (countryFilter !== 'all' && project.country !== countryFilter) return false;
     return true;
   });
