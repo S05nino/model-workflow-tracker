@@ -152,6 +152,20 @@ export function useReleases() {
     saveReleases(updated);
   };
 
+  const updateReleaseDate = (releaseId: string, newDate: string) => {
+    const updated = releases.map((release) => {
+      if (release.id !== releaseId) return release;
+
+      return {
+        ...release,
+        targetDate: newDate,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    saveReleases(updated);
+  };
+
   return {
     releases,
     addRelease,
@@ -161,5 +175,6 @@ export function useReleases() {
     removeModelFromRelease,
     deleteRelease,
     completeRelease,
+    updateReleaseDate,
   };
 }
