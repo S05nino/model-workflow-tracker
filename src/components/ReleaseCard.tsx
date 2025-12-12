@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmModelDialog } from './ConfirmModelDialog';
 import { AddModelToReleaseDialog } from './AddModelToReleaseDialog';
+import { EditReleaseDateDialog } from './EditReleaseDateDialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,6 +28,7 @@ import {
   ChevronDown,
   ChevronRight,
   Check,
+  CalendarDays,
 } from 'lucide-react';
 import { format, parseISO, isPast, differenceInDays } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -38,7 +40,7 @@ interface ReleaseCardProps {
   onToggleInclusion: (modelId: string) => void;
   onConfirmModel: (modelId: string, modelIds: ReleaseModelIds) => void;
   onAddModel: (country: string, segment: Segment) => void;
-  onRemoveModel: (modelId: string) => void;
+  onUpdateDate: (newDate: string) => void;
   onDelete: () => void;
   onComplete: () => void;
 }
@@ -49,7 +51,7 @@ export function ReleaseCard({
   onToggleInclusion,
   onConfirmModel,
   onAddModel,
-  onRemoveModel,
+  onUpdateDate,
   onDelete,
   onComplete,
 }: ReleaseCardProps) {
@@ -59,6 +61,7 @@ export function ReleaseCard({
     country: string;
     segment: string;
   } | null>(null);
+  const [editingDate, setEditingDate] = useState(false);
 
   const targetDate = parseISO(release.targetDate);
   const isOverdue = isPast(targetDate) && !release.completed;
@@ -117,6 +120,12 @@ export function ReleaseCard({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  {!release.completed && (
+                    <DropdownMenuItem onClick={() => setEditingDate(true)}>
+                      <CalendarDays className="w-4 h-4 mr-2" />
+                      Modifica Data
+                    </DropdownMenuItem>
+                  )}
                   {allConfirmed && !release.completed && (
                     <DropdownMenuItem onClick={onComplete}>
                       <Check className="w-4 h-4 mr-2" />
@@ -200,15 +209,6 @@ export function ReleaseCard({
                             >
                               {model.included ? 'Escludi' : 'Includi'}
                             </Button>
-                            
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-destructive hover:text-destructive"
-                              onClick={() => onRemoveModel(model.id)}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
                           </>
                         )}
                       </div>
@@ -240,6 +240,14 @@ export function ReleaseCard({
           onConfirm={(modelIds) => onConfirmModel(confirmingModel.id, modelIds)}
         />
       )}
+
+      <EditReleaseDateDialog
+        open={editingDate}
+        onOpenChange={setEditingDate}
+        currentDate={release.targetDate}
+        version={release.version}
+        onSave={onUpdateDate}
+      />
     </>
   );
 }

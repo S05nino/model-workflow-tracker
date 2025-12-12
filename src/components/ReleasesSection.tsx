@@ -16,9 +16,9 @@ export function ReleasesSection() {
     toggleModelInclusion,
     confirmModelInRelease,
     addModelToRelease,
-    removeModelFromRelease,
     deleteRelease,
     completeRelease,
+    updateReleaseDate,
   } = useReleases();
 
   const { countries, addCountry, removeCountry } = useCountries();
@@ -43,9 +43,9 @@ export function ReleasesSection() {
     });
   };
 
-  const handleRemoveModel = (releaseId: string, modelId: string) => {
-    removeModelFromRelease(releaseId, modelId);
-    toast.info('Modello rimosso dal rilascio');
+  const handleUpdateDate = (releaseId: string, newDate: string) => {
+    updateReleaseDate(releaseId, newDate);
+    toast.success('Data aggiornata');
   };
 
   const handleDeleteRelease = (releaseId: string, version: string) => {
@@ -135,7 +135,7 @@ export function ReleasesSection() {
                     onToggleInclusion={(modelId) => toggleModelInclusion(release.id, modelId)}
                     onConfirmModel={(modelId, modelIds) => handleConfirmModel(release.id, modelId, modelIds)}
                     onAddModel={(country, segment) => handleAddModel(release.id, country, segment)}
-                    onRemoveModel={(modelId) => handleRemoveModel(release.id, modelId)}
+                    onUpdateDate={(newDate) => handleUpdateDate(release.id, newDate)}
                     onDelete={() => handleDeleteRelease(release.id, release.version)}
                     onComplete={() => handleCompleteRelease(release.id, release.version)}
                   />
@@ -158,7 +158,7 @@ export function ReleasesSection() {
                     onToggleInclusion={(modelId) => toggleModelInclusion(release.id, modelId)}
                     onConfirmModel={(modelId, modelIds) => handleConfirmModel(release.id, modelId, modelIds)}
                     onAddModel={(country, segment) => handleAddModel(release.id, country, segment)}
-                    onRemoveModel={(modelId) => handleRemoveModel(release.id, modelId)}
+                    onUpdateDate={(newDate) => handleUpdateDate(release.id, newDate)}
                     onDelete={() => handleDeleteRelease(release.id, release.version)}
                     onComplete={() => handleCompleteRelease(release.id, release.version)}
                   />
