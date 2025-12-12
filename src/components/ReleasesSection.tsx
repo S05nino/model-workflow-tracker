@@ -6,7 +6,6 @@ import { ManageCountriesDialog } from './ManageCountriesDialog';
 import { Segment } from '@/types/project';
 import { ReleaseModelIds } from '@/types/release';
 import { Package } from 'lucide-react';
-import { toast } from 'sonner';
 import { parseISO, compareAsc } from 'date-fns';
 
 export function ReleasesSection() {
@@ -25,56 +24,34 @@ export function ReleasesSection() {
 
   const handleAddRelease = (version: string, targetDate: string, models: { country: string; segment: Segment }[]) => {
     addRelease(version, targetDate, models);
-    toast.success('Rilascio creato', {
-      description: `Versione ${version} aggiunta con ${models.length} modelli`,
-    });
   };
 
   const handleConfirmModel = (releaseId: string, modelId: string, modelIds: ReleaseModelIds) => {
     confirmModelInRelease(releaseId, modelId, modelIds);
-    toast.success('Modello confermato nel rilascio');
   };
 
   const handleAddModel = (releaseId: string, country: string, segment: Segment) => {
     addModelToRelease(releaseId, country, segment);
-    const countryName = countries.find(c => c.code === country)?.name || country;
-    toast.success('Modello aggiunto', {
-      description: `${countryName} - ${segment} aggiunto al rilascio`,
-    });
   };
 
   const handleUpdateDate = (releaseId: string, newDate: string) => {
     updateReleaseDate(releaseId, newDate);
-    toast.success('Data aggiornata');
   };
 
-  const handleDeleteRelease = (releaseId: string, version: string) => {
+  const handleDeleteRelease = (releaseId: string) => {
     deleteRelease(releaseId);
-    toast.info('Rilascio eliminato', {
-      description: `Versione ${version} rimossa`,
-    });
   };
 
-  const handleCompleteRelease = (releaseId: string, version: string) => {
+  const handleCompleteRelease = (releaseId: string) => {
     completeRelease(releaseId);
-    toast.success('Rilascio completato!', {
-      description: `Versione ${version} completata con successo`,
-    });
   };
 
   const handleAddCountry = (country: { code: string; name: string; segments: Segment[] }) => {
     addCountry(country);
-    toast.success('Paese aggiunto', {
-      description: `${country.name} (${country.code}) è ora disponibile`,
-    });
   };
 
   const handleRemoveCountry = (countryCode: string) => {
-    const country = countries.find(c => c.code === countryCode);
     removeCountry(countryCode);
-    toast.info('Paese rimosso', {
-      description: `${country?.name || countryCode} rimosso dalla lista`,
-    });
   };
 
   const activeReleases = releases
@@ -136,8 +113,8 @@ export function ReleasesSection() {
                     onConfirmModel={(modelId, modelIds) => handleConfirmModel(release.id, modelId, modelIds)}
                     onAddModel={(country, segment) => handleAddModel(release.id, country, segment)}
                     onUpdateDate={(newDate) => handleUpdateDate(release.id, newDate)}
-                    onDelete={() => handleDeleteRelease(release.id, release.version)}
-                    onComplete={() => handleCompleteRelease(release.id, release.version)}
+                    onDelete={() => handleDeleteRelease(release.id)}
+                    onComplete={() => handleCompleteRelease(release.id)}
                   />
                 ))}
               </div>
@@ -159,8 +136,8 @@ export function ReleasesSection() {
                     onConfirmModel={(modelId, modelIds) => handleConfirmModel(release.id, modelId, modelIds)}
                     onAddModel={(country, segment) => handleAddModel(release.id, country, segment)}
                     onUpdateDate={(newDate) => handleUpdateDate(release.id, newDate)}
-                    onDelete={() => handleDeleteRelease(release.id, release.version)}
-                    onComplete={() => handleCompleteRelease(release.id, release.version)}
+                    onDelete={() => handleDeleteRelease(release.id)}
+                    onComplete={() => handleCompleteRelease(release.id)}
                   />
                 ))}
               </div>
