@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Release, ReleaseModelIds } from '@/types/release';
-import { COUNTRIES, SEGMENT_LABELS } from '@/types/project';
+import { CountryConfig, Segment, SEGMENT_LABELS } from '@/types/project';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmModelDialog } from './ConfirmModelDialog';
+import { AddModelToReleaseDialog } from './AddModelToReleaseDialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,16 +34,22 @@ import { cn } from '@/lib/utils';
 
 interface ReleaseCardProps {
   release: Release;
+  countries: CountryConfig[];
   onToggleInclusion: (modelId: string) => void;
   onConfirmModel: (modelId: string, modelIds: ReleaseModelIds) => void;
+  onAddModel: (country: string, segment: Segment) => void;
+  onRemoveModel: (modelId: string) => void;
   onDelete: () => void;
   onComplete: () => void;
 }
 
 export function ReleaseCard({
   release,
+  countries,
   onToggleInclusion,
   onConfirmModel,
+  onAddModel,
+  onRemoveModel,
   onDelete,
   onComplete,
 }: ReleaseCardProps) {
@@ -62,7 +69,7 @@ export function ReleaseCard({
   const allConfirmed = confirmedCount === includedModels.length && includedModels.length > 0;
 
   const getCountryName = (code: string) => {
-    return COUNTRIES.find(c => c.code === code)?.name || code;
+    return countries.find(c => c.code === code)?.name || code;
   };
 
   return (
@@ -193,6 +200,15 @@ export function ReleaseCard({
                             >
                               {model.included ? 'Escludi' : 'Includi'}
                             </Button>
+                            
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => onRemoveModel(model.id)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
                           </>
                         )}
                       </div>
@@ -200,6 +216,16 @@ export function ReleaseCard({
                   );
                 })}
               </div>
+              
+              {!release.completed && (
+                <div className="mt-4 pt-4 border-t">
+                  <AddModelToReleaseDialog
+                    existingModels={release.models}
+                    countries={countries}
+                    onAdd={onAddModel}
+                  />
+                </div>
+              )}
             </CardContent>
           </CollapsibleContent>
         </Collapsible>

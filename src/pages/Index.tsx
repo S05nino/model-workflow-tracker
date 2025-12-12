@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useProjects } from '@/hooks/useProjects';
 import { useReleases } from '@/hooks/useReleases';
+import { useCountries } from '@/hooks/useCountries';
 import { ProjectCard } from '@/components/ProjectCard';
 import { NewProjectDialog } from '@/components/NewProjectDialog';
 import { DashboardStats } from '@/components/DashboardStats';
 import { FilterBar } from '@/components/FilterBar';
 import { ReleasesSection } from '@/components/ReleasesSection';
-import { ProjectStatus, Segment, TestType, COUNTRIES } from '@/types/project';
+import { ProjectStatus, Segment, TestType } from '@/types/project';
 import { Brain, Workflow, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -25,6 +26,7 @@ const Index = () => {
   } = useProjects();
 
   const { releases } = useReleases();
+  const { countries } = useCountries();
 
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | 'all'>('all');
   const [countryFilter, setCountryFilter] = useState<string | 'all'>('all');
@@ -45,7 +47,7 @@ const Index = () => {
 
   const handleAddProject = (country: string, segment: Segment, testType: TestType) => {
     addProject(country, segment, testType);
-    const countryName = COUNTRIES.find(c => c.code === country)?.name || country;
+    const countryName = countries.find(c => c.code === country)?.name || country;
     toast.success('Progetto creato', {
       description: `${countryName} aggiunto con successo`,
     });
@@ -98,7 +100,7 @@ const Index = () => {
                 <Download className="w-4 h-4 mr-2" />
                 Esporta Report
               </Button>
-              <NewProjectDialog onAdd={handleAddProject} />
+              <NewProjectDialog onAdd={handleAddProject} countries={countries} />
             </div>
           </div>
         </header>
@@ -120,6 +122,7 @@ const Index = () => {
             <FilterBar
               statusFilter={statusFilter}
               countryFilter={countryFilter}
+              countries={countries}
               onStatusChange={setStatusFilter}
               onCountryChange={setCountryFilter}
               onClearFilters={() => {
@@ -154,6 +157,7 @@ const Index = () => {
                         <ProjectCard
                           key={project.id}
                           project={project}
+                          countries={countries}
                           onUpdateStep={(step) => updateProjectStep(project.id, step)}
                           onStartNewRound={(testType) => startNewRound(project.id, testType)}
                           onConfirm={() => handleConfirmProject(project.id, project.country)}
@@ -176,6 +180,7 @@ const Index = () => {
                         <ProjectCard
                           key={project.id}
                           project={project}
+                          countries={countries}
                           onUpdateStep={(step) => updateProjectStep(project.id, step)}
                           onStartNewRound={(testType) => startNewRound(project.id, testType)}
                           onConfirm={() => handleConfirmProject(project.id, project.country)}

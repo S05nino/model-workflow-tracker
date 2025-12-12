@@ -6,12 +6,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { COUNTRIES, ProjectStatus } from '@/types/project';
+import { CountryConfig, ProjectStatus } from '@/types/project';
 import { Filter, X } from 'lucide-react';
 
 interface FilterBarProps {
   statusFilter: ProjectStatus | 'all';
   countryFilter: string | 'all';
+  countries: CountryConfig[];
   onStatusChange: (status: ProjectStatus | 'all') => void;
   onCountryChange: (country: string | 'all') => void;
   onClearFilters: () => void;
@@ -28,6 +29,7 @@ const STATUS_OPTIONS: { value: ProjectStatus | 'all'; label: string }[] = [
 export function FilterBar({
   statusFilter,
   countryFilter,
+  countries,
   onStatusChange,
   onCountryChange,
   onClearFilters,
@@ -60,7 +62,7 @@ export function FilterBar({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">Tutti i paesi</SelectItem>
-          {COUNTRIES.map((c) => (
+          {countries.map((c) => (
             <SelectItem key={c.code} value={c.code}>
               {c.name}
             </SelectItem>

@@ -1,6 +1,8 @@
 import { useReleases } from '@/hooks/useReleases';
+import { useCountries } from '@/hooks/useCountries';
 import { ReleaseCard } from './ReleaseCard';
 import { NewReleaseDialog } from './NewReleaseDialog';
+import { ManageCountriesDialog } from './ManageCountriesDialog';
 import { Segment } from '@/types/project';
 import { ReleaseModelIds } from '@/types/release';
 import { Package } from 'lucide-react';
@@ -13,9 +15,13 @@ export function ReleasesSection() {
     addRelease,
     toggleModelInclusion,
     confirmModelInRelease,
+    addModelToRelease,
+    removeModelFromRelease,
     deleteRelease,
     completeRelease,
   } = useReleases();
+
+  const { countries, addCountry, removeCountry } = useCountries();
 
   const handleAddRelease = (version: string, targetDate: string, models: { country: string; segment: Segment }[]) => {
     addRelease(version, targetDate, models);
@@ -29,6 +35,19 @@ export function ReleasesSection() {
     toast.success('Modello confermato nel rilascio');
   };
 
+  const handleAddModel = (releaseId: string, country: string, segment: Segment) => {
+    addModelToRelease(releaseId, country, segment);
+    const countryName = countries.find(c => c.code === country)?.name || country;
+    toast.success('Modello aggiunto', {
+      description: `${countryName} - ${segment} aggiunto al rilascio`,
+    });
+  };
+
+  const handleRemoveModel = (releaseId: string, modelId: string) => {
+    removeModelFromRelease(releaseId, modelId);
+    toast.info('Modello rimosso dal rilascio');
+  };
+
   const handleDeleteRelease = (releaseId: string, version: string) => {
     deleteRelease(releaseId);
     toast.info('Rilascio eliminato', {
@@ -40,6 +59,21 @@ export function ReleasesSection() {
     completeRelease(releaseId);
     toast.success('Rilascio completato!', {
       description: `Versione ${version} completata con successo`,
+    });
+  };
+
+  const handleAddCountry = (country: { code: string; name: string; segments: Segment[] }) => {
+    addCountry(country);
+    toast.success('Paese aggiunto', {
+      description: `${country.name} (${country.code}) è ora disponibile`,
+    });
+  };
+
+  const handleRemoveCountry = (countryCode: string) => {
+    const country = countries.find(c => c.code === countryCode);
+    removeCountry(countryCode);
+    toast.info('Paese rimosso', {
+      description: `${country?.name || countryCode} rimosso dalla lista`,
     });
   };
 
@@ -65,7 +99,14 @@ export function ReleasesSection() {
             </p>
           </div>
         </div>
-        <NewReleaseDialog onAdd={handleAddRelease} />
+        <div className="flex gap-2">
+          <ManageCountriesDialog
+            countries={countries}
+            onAddCountry={handleAddCountry}
+            onRemoveCountry={handleRemoveCountry}
+          />
+          <NewReleaseDialog onAdd={handleAddRelease} countries={countries} />
+        </div>
       </div>
 
       {releases.length === 0 ? (
@@ -90,8 +131,11 @@ export function ReleasesSection() {
                   <ReleaseCard
                     key={release.id}
                     release={release}
+                    countries={countries}
                     onToggleInclusion={(modelId) => toggleModelInclusion(release.id, modelId)}
                     onConfirmModel={(modelId, modelIds) => handleConfirmModel(release.id, modelId, modelIds)}
+                    onAddModel={(country, segment) => handleAddModel(release.id, country, segment)}
+                    onRemoveModel={(modelId) => handleRemoveModel(release.id, modelId)}
                     onDelete={() => handleDeleteRelease(release.id, release.version)}
                     onComplete={() => handleCompleteRelease(release.id, release.version)}
                   />
@@ -110,8 +154,11 @@ export function ReleasesSection() {
                   <ReleaseCard
                     key={release.id}
                     release={release}
+                    countries={countries}
                     onToggleInclusion={(modelId) => toggleModelInclusion(release.id, modelId)}
                     onConfirmModel={(modelId, modelIds) => handleConfirmModel(release.id, modelId, modelIds)}
+                    onAddModel={(country, segment) => handleAddModel(release.id, country, segment)}
+                    onRemoveModel={(modelId) => handleRemoveModel(release.id, modelId)}
                     onDelete={() => handleDeleteRelease(release.id, release.version)}
                     onComplete={() => handleCompleteRelease(release.id, release.version)}
                   />
