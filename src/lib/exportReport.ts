@@ -1,9 +1,7 @@
-import { Project, COUNTRIES, SEGMENT_LABELS, TEST_TYPE_LABELS, WORKFLOW_STEPS } from "@/types/project";
+import { Project, CountryConfig, SEGMENT_LABELS, TEST_TYPE_LABELS, WORKFLOW_STEPS } from "@/types/project";
 import { Release } from "@/types/release";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
-
-const getCountryName = (code: string) => COUNTRIES.find((c) => c.code === code)?.name || code;
 
 const getStatusLabel = (status: string) => {
   const labels: Record<string, string> = {
@@ -15,7 +13,8 @@ const getStatusLabel = (status: string) => {
   return labels[status] || status;
 };
 
-export async function exportDashboardReport(projects: Project[], releases: Release[]) {
+export async function exportDashboardReport(projects: Project[], releases: Release[], countries: CountryConfig[]) {
+  const getCountryName = (code: string) => countries.find((c) => c.code === code)?.name || code;
   const XLSX = await import("xlsx");
   const workbook = XLSX.utils.book_new();
   const reportDate = format(new Date(), "dd/MM/yyyy HH:mm", { locale: it });
