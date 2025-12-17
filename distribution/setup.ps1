@@ -18,8 +18,8 @@ Write-Host "Docker OK!" -ForegroundColor Green
 
 # Chiedi il nome utente Windows
 Write-Host ""
-Write-Host "Inserisci il tuo nome utente Windows" -ForegroundColor Yellow
-Write-Host "Esempio: se il tuo percorso e' C:\Users\mario.rossi\... inserisci: mario.rossi" -ForegroundColor Gray
+Write-Host "Inserisci il tuo nome utente" -ForegroundColor Yellow
+Write-Host "Esempio: se il tuo percorso e' C:\Users\xx0nomeutente\... inserisci: xx0nomeutente" -ForegroundColor Gray
 Write-Host "Premi INVIO per usare l'utente corrente ($env:USERNAME)" -ForegroundColor Gray
 $inputUsername = Read-Host "Nome utente"
 
