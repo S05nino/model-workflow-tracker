@@ -8,8 +8,7 @@ PREREQUISITI:
 
 PRIMO AVVIO:
 1. Doppio click su "setup.ps1"
-2. Inserisci il percorso della cartella OneDrive quando richiesto
-   (es: C:\Users\tuonome\OneDrive - CRIF SpA\CE)
+2. Lo script rileva automaticamente il tuo utente Windows
 3. Attendi il completamento
 4. Apri il browser su http://localhost:8080
 
