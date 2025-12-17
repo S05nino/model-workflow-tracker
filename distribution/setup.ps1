@@ -16,17 +16,10 @@ if (-not $?) {
 }
 Write-Host "Docker OK!" -ForegroundColor Green
 
-# Chiedi il nome utente Windows
+# Usa automaticamente il nome utente corrente
+$inputUsername = $env:USERNAME
 Write-Host ""
-Write-Host "Inserisci il tuo nome utente" -ForegroundColor Yellow
-Write-Host "Esempio: se il tuo percorso e' C:\Users\xx0nomeutente\... inserisci: xx0nomeutente" -ForegroundColor Gray
-Write-Host "Premi INVIO per usare l'utente corrente ($env:USERNAME)" -ForegroundColor Gray
-$inputUsername = Read-Host "Nome utente"
-
-# Usa l'utente corrente se non specificato
-if ([string]::IsNullOrWhiteSpace($inputUsername)) {
-    $inputUsername = $env:USERNAME
-}
+Write-Host "Utente rilevato: $inputUsername" -ForegroundColor Cyan
 
 # Costruisci il percorso automaticamente
 $dataFolder = "C:\Users\$inputUsername\OneDrive - CRIF SpA\CE"
