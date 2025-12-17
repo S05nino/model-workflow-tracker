@@ -1,0 +1,25 @@
+services:
+  frontend:
+    image: ml-workflow-frontend:latest
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    networks:
+      - ml-workflow
+
+  backend:
+    image: ml-workflow-backend:latest
+    ports:
+      - "3001:3001"
+    environment:
+      - DATA_PATH=/data/data.json
+    volumes:
+      # Questo percorso viene sostituito dallo script setup.ps1
+      - "${DATA_FOLDER}:/data"
+    networks:
+      - ml-workflow
+
+networks:
+  ml-workflow:
+    driver: bridge
