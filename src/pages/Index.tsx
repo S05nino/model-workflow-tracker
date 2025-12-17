@@ -2,13 +2,14 @@ import { useState } from 'react';
 import { useProjects } from '@/hooks/useProjects';
 import { useReleases } from '@/hooks/useReleases';
 import { useCountries } from '@/hooks/useCountries';
+import { useAuth } from '@/contexts/AuthContext';
 import { ProjectCard } from '@/components/ProjectCard';
 import { NewProjectDialog } from '@/components/NewProjectDialog';
 import { DashboardStats } from '@/components/DashboardStats';
 import { FilterBar } from '@/components/FilterBar';
 import { ReleasesSection } from '@/components/ReleasesSection';
 import { ProjectStatus, Segment, TestType } from '@/types/project';
-import { Brain, Workflow, Download } from 'lucide-react';
+import { Brain, Workflow, Download, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -27,6 +28,7 @@ const Index = () => {
 
   const { releases } = useReleases();
   const { countries } = useCountries();
+  const { signOut } = useAuth();
 
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | 'all'>('all');
   const [countryFilter, setCountryFilter] = useState<string | 'all'>('all');
@@ -91,8 +93,8 @@ const Index = () => {
             <div className="flex gap-2">
               <Button
                 variant="outline"
-              onClick={async () => {
-                const fileName = await exportDashboardReport(projects, releases, countries);
+                onClick={async () => {
+                  const fileName = await exportDashboardReport(projects, releases, countries);
                   toast.success('Report esportato', {
                     description: `File ${fileName} scaricato`,
                   });
@@ -102,6 +104,14 @@ const Index = () => {
                 Esporta Report
               </Button>
               <NewProjectDialog onAdd={handleAddProject} countries={countries} />
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={signOut}
+                title="Esci"
+              >
+                <LogOut className="w-4 h-4" />
+              </Button>
             </div>
           </div>
         </header>
