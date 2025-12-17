@@ -16,15 +16,30 @@ if (-not $?) {
 }
 Write-Host "Docker OK!" -ForegroundColor Green
 
-# Chiedi il percorso della cartella OneDrive con il data.json
+# Chiedi il nome utente Windows
 Write-Host ""
-Write-Host "Inserisci il percorso COMPLETO della cartella OneDrive dove si trova data.json" -ForegroundColor Yellow
-Write-Host "Esempio: C:\Users\tuonome\OneDrive - CRIF SpA\CE" -ForegroundColor Gray
-$dataFolder = Read-Host "Percorso"
+Write-Host "Inserisci il tuo nome utente Windows" -ForegroundColor Yellow
+Write-Host "Esempio: se il tuo percorso e' C:\Users\mario.rossi\... inserisci: mario.rossi" -ForegroundColor Gray
+Write-Host "Premi INVIO per usare l'utente corrente ($env:USERNAME)" -ForegroundColor Gray
+$inputUsername = Read-Host "Nome utente"
+
+# Usa l'utente corrente se non specificato
+if ([string]::IsNullOrWhiteSpace($inputUsername)) {
+    $inputUsername = $env:USERNAME
+}
+
+# Costruisci il percorso automaticamente
+$dataFolder = "C:\Users\$inputUsername\OneDrive - CRIF SpA\CE"
+
+Write-Host "Percorso utilizzato: $dataFolder" -ForegroundColor Cyan
 
 # Verifica che il percorso esista
 if (-not (Test-Path $dataFolder)) {
     Write-Host "ERRORE: Il percorso '$dataFolder' non esiste." -ForegroundColor Red
+    Write-Host "Verifica che:" -ForegroundColor Yellow
+    Write-Host "  1. Il nome utente sia corretto" -ForegroundColor Yellow
+    Write-Host "  2. OneDrive sia configurato e sincronizzato" -ForegroundColor Yellow
+    Write-Host "  3. La cartella 'CE' esista in OneDrive" -ForegroundColor Yellow
     Read-Host "Premi INVIO per uscire"
     exit 1
 }
