@@ -4,6 +4,17 @@ import { supabase } from "@/integrations/supabase/client";
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
+// Map DB test_type to TypeScript TestType
+const mapTestType = (dbTestType: string): TestType => {
+  const mapping: Record<string, TestType> = {
+    'testsuite': 'test-suite',
+    'test-suite': 'test-suite',
+    'categorization': 'categorization',
+    'tagging': 'tagging',
+  };
+  return mapping[dbTestType] || 'test-suite';
+};
+
 // Map database row to Project type
 const mapDbToProject = (row: any): Project => ({
   id: row.id,
@@ -14,7 +25,7 @@ const mapDbToProject = (row: any): Project => ({
   rounds: [{
     id: `round-${row.id}`,
     roundNumber: row.current_round,
-    testType: row.test_type as TestType,
+    testType: mapTestType(row.test_type),
     currentStep: parseInt(row.status === "waiting" ? "5" : row.status === "completed" ? "5" : "3") as WorkflowStep,
     startedAt: row.created_at,
     completedAt: row.status === "completed" || row.status === "waiting" ? row.updated_at : undefined,
