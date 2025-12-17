@@ -1,186 +1,251 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Project, WorkflowRound, TestType, WorkflowStep, Segment } from "@/types/project";
-import { supabase } from "@/integrations/supabase/client";
+
+const STORAGE_KEY = "ml-workflow-projects";
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
-// Map DB test_type to TypeScript TestType
-const mapTestType = (dbTestType: string): TestType => {
-  const mapping: Record<string, TestType> = {
-    'testsuite': 'test-suite',
-    'test-suite': 'test-suite',
-    'categorization': 'categorization',
-    'tagging': 'tagging',
-  };
-  return mapping[dbTestType] || 'test-suite';
-};
-
-// Map database row to Project type
-const mapDbToProject = (row: any): Project => ({
-  id: row.id,
-  country: row.country,
-  segment: row.segment as Segment,
-  status: row.status as Project["status"],
-  currentRound: row.current_round,
-  rounds: [{
-    id: `round-${row.id}`,
-    roundNumber: row.current_round,
-    testType: mapTestType(row.test_type),
-    currentStep: parseInt(row.status === "waiting" ? "5" : row.status === "completed" ? "5" : "3") as WorkflowStep,
-    startedAt: row.created_at,
-    completedAt: row.status === "completed" || row.status === "waiting" ? row.updated_at : undefined,
-  }],
-  createdAt: row.created_at,
-  updatedAt: row.updated_at,
-  awaitingConfirmation: row.status === "waiting",
-  confirmedAt: row.status === "completed" ? row.updated_at : undefined,
-});
+const INITIAL_PROJECTS: Project[] = [
+  {
+    id: "austria-1",
+    country: "AUT",
+    segment: "consumer",
+    status: "in-progress",
+    currentRound: 1,
+    rounds: [
+      {
+        id: "r-austria-1",
+        roundNumber: 1,
+        testType: "test-suite",
+        currentStep: 3,
+        startedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+    ],
+    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: "rep-ceca-1",
+    country: "CZK",
+    segment: "consumer",
+    status: "waiting",
+    currentRound: 1,
+    rounds: [
+      {
+        id: "r-rep-ceca-1",
+        roundNumber: 1,
+        testType: "test-suite",
+        currentStep: 5,
+        startedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+        completedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      },
+    ],
+    createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+    awaitingConfirmation: true,
+  },
+  {
+    id: "belgio-1",
+    country: "BEL",
+    segment: "business",
+    status: "in-progress",
+    currentRound: 1,
+    rounds: [
+      {
+        id: "r-belgio-1",
+        roundNumber: 1,
+        testType: "categorization",
+        currentStep: 3,
+        startedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+    ],
+    createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: "italia-1",
+    country: "ITA",
+    segment: "consumer",
+    status: "waiting",
+    currentRound: 1,
+    rounds: [
+      {
+        id: "r-italia-1",
+        roundNumber: 1,
+        testType: "test-suite",
+        currentStep: 5,
+        startedAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
+        completedAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+      },
+    ],
+    createdAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+    awaitingConfirmation: true,
+  },
+];
 
 export function useProjects() {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  const fetchProjects = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from("projects")
-        .select("*")
-        .order("created_at", { ascending: true });
-
-      if (error) throw error;
-
-      const mappedProjects = (data || []).map(mapDbToProject);
-      setProjects(mappedProjects);
-    } catch (err) {
-      console.error("Error fetching projects:", err);
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      // Reset if old data structure (no segment or old step count)
+      const needsReset =
+        parsed.length > 0 &&
+        (!parsed[0].segment ||
+          !parsed.find((p: Project) => p.country === "ITA") ||
+          parsed.some((p: Project) => p.rounds?.some((r: WorkflowRound) => r.currentStep > 5)));
+      if (needsReset) {
+        setProjects(INITIAL_PROJECTS);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_PROJECTS));
+      } else {
+        setProjects(parsed);
+      }
+    } else {
+      setProjects(INITIAL_PROJECTS);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_PROJECTS));
     }
   }, []);
 
-  useEffect(() => {
-    fetchProjects();
+  const saveProjects = (newProjects: Project[]) => {
+    setProjects(newProjects);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(newProjects));
+  };
 
-    // Subscribe to realtime changes
-    const channel = supabase
-      .channel("projects-changes")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "projects" },
-        () => fetchProjects()
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
+  const addProject = (country: string, segment: Segment, testType: TestType) => {
+    const now = new Date().toISOString();
+    const newRound: WorkflowRound = {
+      id: generateId(),
+      roundNumber: 1,
+      testType,
+      currentStep: 1,
+      startedAt: now,
     };
-  }, [fetchProjects]);
 
-  const addProject = async (country: string, segment: Segment, testType: TestType) => {
-    try {
-      const { data, error } = await supabase
-        .from("projects")
-        .insert({
-          country,
-          segment,
-          test_type: testType,
-          status: "in-progress",
-          current_round: 1,
-        })
-        .select()
-        .single();
+    const newProject: Project = {
+      id: generateId(),
+      country,
+      segment,
+      status: "in-progress",
+      currentRound: 1,
+      rounds: [newRound],
+      createdAt: now,
+      updatedAt: now,
+    };
 
-      if (error) throw error;
-      return mapDbToProject(data);
-    } catch (err) {
-      console.error("Error adding project:", err);
-      throw err;
-    }
+    saveProjects([...projects, newProject]);
+    return newProject;
   };
 
-  const updateProjectStep = async (projectId: string, step: WorkflowStep) => {
-    try {
-      const newStatus = step === 5 ? "waiting" : "in-progress";
-      const { error } = await supabase
-        .from("projects")
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
-        .eq("id", projectId);
+  const updateProjectStep = (projectId: string, step: WorkflowStep) => {
+    const updated = projects.map((project) => {
+      if (project.id !== projectId) return project;
 
-      if (error) throw error;
-    } catch (err) {
-      console.error("Error updating project step:", err);
-      throw err;
-    }
+      const currentRoundIndex = project.rounds.findIndex((r) => r.roundNumber === project.currentRound);
+
+      if (currentRoundIndex === -1) return project;
+
+      const updatedRounds = [...project.rounds];
+      updatedRounds[currentRoundIndex] = {
+        ...updatedRounds[currentRoundIndex],
+        currentStep: step,
+        ...(step === 5 ? { completedAt: new Date().toISOString() } : {}),
+      };
+
+      return {
+        ...project,
+        rounds: updatedRounds,
+        updatedAt: new Date().toISOString(),
+        ...(step === 5 ? { awaitingConfirmation: true, status: "waiting" as const } : {}),
+      };
+    });
+
+    saveProjects(updated);
   };
 
-  const startNewRound = async (projectId: string, testType: TestType) => {
-    try {
-      const project = projects.find((p) => p.id === projectId);
-      if (!project) return;
+  const startNewRound = (projectId: string, testType: TestType) => {
+    const updated = projects.map((project) => {
+      if (project.id !== projectId) return project;
 
-      const { error } = await supabase
-        .from("projects")
-        .update({
-          current_round: project.currentRound + 1,
-          test_type: testType,
-          status: "in-progress",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", projectId);
+      const newRoundNumber = project.currentRound + 1;
+      const newRound: WorkflowRound = {
+        id: generateId(),
+        roundNumber: newRoundNumber,
+        testType,
+        currentStep: 1,
+        startedAt: new Date().toISOString(),
+      };
 
-      if (error) throw error;
-    } catch (err) {
-      console.error("Error starting new round:", err);
-      throw err;
-    }
+      return {
+        ...project,
+        currentRound: newRoundNumber,
+        rounds: [...project.rounds, newRound],
+        status: "in-progress" as const,
+        awaitingConfirmation: false,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    saveProjects(updated);
   };
 
-  const confirmProject = async (projectId: string) => {
-    try {
-      const { error } = await supabase
-        .from("projects")
-        .update({ status: "completed", updated_at: new Date().toISOString() })
-        .eq("id", projectId);
+  const confirmProject = (projectId: string) => {
+    const updated = projects.map((project) => {
+      if (project.id !== projectId) return project;
 
-      if (error) throw error;
-    } catch (err) {
-      console.error("Error confirming project:", err);
-      throw err;
-    }
+      return {
+        ...project,
+        status: "completed" as const,
+        awaitingConfirmation: false,
+        confirmedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    saveProjects(updated);
   };
 
-  const updateProjectStatus = async (projectId: string, status: Project["status"]) => {
-    try {
-      const { error } = await supabase
-        .from("projects")
-        .update({ status, updated_at: new Date().toISOString() })
-        .eq("id", projectId);
+  const updateProjectStatus = (projectId: string, status: Project["status"]) => {
+    const updated = projects.map((project) => {
+      if (project.id !== projectId) return project;
 
-      if (error) throw error;
-    } catch (err) {
-      console.error("Error updating project status:", err);
-      throw err;
-    }
+      return {
+        ...project,
+        status,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    saveProjects(updated);
   };
 
-  const deleteProject = async (projectId: string) => {
-    try {
-      const { error } = await supabase.from("projects").delete().eq("id", projectId);
-      if (error) throw error;
-    } catch (err) {
-      console.error("Error deleting project:", err);
-      throw err;
-    }
+  const deleteProject = (projectId: string) => {
+    saveProjects(projects.filter((p) => p.id !== projectId));
   };
 
-  const addRoundNotes = async (projectId: string, roundNumber: number, notes: string) => {
-    // Notes not currently supported in DB schema - could be added as a field
-    console.log("Notes feature not yet implemented in DB:", { projectId, roundNumber, notes });
+  const addRoundNotes = (projectId: string, roundNumber: number, notes: string) => {
+    const updated = projects.map((project) => {
+      if (project.id !== projectId) return project;
+
+      const updatedRounds = project.rounds.map((round) => {
+        if (round.roundNumber !== roundNumber) return round;
+        return { ...round, notes };
+      });
+
+      return {
+        ...project,
+        rounds: updatedRounds,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    saveProjects(updated);
   };
 
   return {
     projects,
-    loading,
     addProject,
     updateProjectStep,
     startNewRound,
