@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    networks:
+      - ml-workflow
+
+  backend:
+    build:
+      context: docker/backend
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - DATA_PATH=/data/data.json
+    volumes:
+      # Monta la cartella OneDrive locale per il file JSON
+      # Modifica questo percorso con la tua cartella OneDrive
+      - ./data:/data
+    networks:
+      - ml-workflow
+
+networks:
+  ml-workflow:
+    driver: bridge

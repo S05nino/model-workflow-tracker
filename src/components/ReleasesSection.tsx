@@ -1,5 +1,4 @@
-import { useReleases } from '@/hooks/useReleases';
-import { useCountries } from '@/hooks/useCountries';
+import { useReleasesAdapter as useReleases, useCountriesAdapter as useCountries } from '@/hooks/adapters';
 import { ReleaseCard } from './ReleaseCard';
 import { NewReleaseDialog } from './NewReleaseDialog';
 import { ManageCountriesDialog } from './ManageCountriesDialog';

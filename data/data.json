@@ -1,0 +1,17 @@
+{
+  "projects": [],
+  "releases": [],
+  "release_models": [],
+  "app_config": [
+    {
+      "id": "config-1",
+      "key": "shared_password",
+      "value": "workflow2024"
+    },
+    {
+      "id": "config-2",
+      "key": "countries",
+      "value": "[{\"code\":\"AUT\",\"name\":\"Austria\",\"segments\":[\"consumer\"]},{\"code\":\"BEL\",\"name\":\"Belgio\",\"segments\":[\"consumer\",\"business\"]},{\"code\":\"CZK\",\"name\":\"Rep. Ceca\",\"segments\":[\"consumer\",\"business\"]},{\"code\":\"DEU\",\"name\":\"Germania\",\"segments\":[\"consumer\",\"business\",\"tagger\"]},{\"code\":\"ESP\",\"name\":\"Spagna\",\"segments\":[\"consumer\",\"business\",\"tagger\"]},{\"code\":\"FRA\",\"name\":\"Francia\",\"segments\":[\"consumer\",\"business\",\"tagger\"]},{\"code\":\"GBR\",\"name\":\"Regno Unito\",\"segments\":[\"consumer\",\"business\",\"tagger\"]},{\"code\":\"IND\",\"name\":\"India\",\"segments\":[\"consumer\",\"business\",\"tagger\"]},{\"code\":\"IRL\",\"name\":\"Irlanda\",\"segments\":[\"consumer\",\"business\"]},{\"code\":\"ITA\",\"name\":\"Italia\",\"segments\":[\"consumer\",\"business\",\"tagger\"]},{\"code\":\"ITA2\",\"name\":\"Italia2\",\"segments\":[\"consumer\",\"business\"]},{\"code\":\"MEX\",\"name\":\"Messico\",\"segments\":[\"consumer\",\"tagger\"]},{\"code\":\"POL\",\"name\":\"Polonia\",\"segments\":[\"consumer\"]},{\"code\":\"PRT\",\"name\":\"Portogallo\",\"segments\":[\"consumer\"]},{\"code\":\"USA\",\"name\":\"USA\",\"segments\":[\"consumer\"]}]"
+    }
+  ]
+}
