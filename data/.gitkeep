@@ -1,0 +1,3 @@
+# This folder will contain the shared JSON data file
+# Replace this folder with a symlink to your OneDrive folder, or
+# modify docker-compose.yml to point to your OneDrive path

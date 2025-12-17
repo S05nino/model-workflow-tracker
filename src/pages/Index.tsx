@@ -1,7 +1,5 @@
 import { useState } from 'react';
-import { useProjects } from '@/hooks/useProjects';
-import { useReleases } from '@/hooks/useReleases';
-import { useCountries } from '@/hooks/useCountries';
+import { useProjectsAdapter as useProjects, useReleasesAdapter as useReleases, useCountriesAdapter as useCountries } from '@/hooks/adapters';
 import { ProjectCard } from '@/components/ProjectCard';
 import { NewProjectDialog } from '@/components/NewProjectDialog';
 import { DashboardStats } from '@/components/DashboardStats';
