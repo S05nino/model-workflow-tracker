@@ -65,7 +65,6 @@ Write-Host "Percorso dati OK!" -ForegroundColor Green
 # Importa le immagini Docker se presenti
 $frontendImage = Join-Path $PSScriptRoot "images\frontend.tar"
 $backendImage = Join-Path $PSScriptRoot "images\backend.tar"
-$pythonImage = Join-Path $PSScriptRoot "images\python.tar"
 
 if (Test-Path $frontendImage) {
     Write-Host ""
@@ -88,22 +87,6 @@ if (Test-Path $backendImage) {
     exit 1
 }
 
-if (Test-Path $pythonImage) {
-    Write-Host "Importazione immagine python-backend (TestSuite)..." -ForegroundColor Yellow
-    docker load -i $pythonImage
-    Write-Host "Python backend importato!" -ForegroundColor Green
-} else {
-    Write-Host "AVVISO: Immagine python.tar non trovata - TestSuite non disponibile" -ForegroundColor Yellow
-}
-
-# Crea cartella TEST_SUITE se non esiste (per la TestSuite)
-$testSuiteFolder = Join-Path $dataFolder "TEST_SUITE"
-if (-not (Test-Path $testSuiteFolder)) {
-    Write-Host "Creazione cartella TEST_SUITE..." -ForegroundColor Yellow
-    New-Item -ItemType Directory -Path $testSuiteFolder | Out-Null
-    Write-Host "Cartella TEST_SUITE creata. Popola con i file dei modelli per usare la TestSuite." -ForegroundColor Yellow
-}
-
 # Salva il percorso in un file .env per docker-compose
 $envFile = Join-Path $PSScriptRoot ".env"
 "DATA_FOLDER=$dataFolder" | Out-File -FilePath $envFile -Encoding UTF8
@@ -122,10 +105,6 @@ if ($?) {
     Write-Host "========================================" -ForegroundColor Green
     Write-Host ""
     Write-Host "Apri il browser e vai su: http://localhost:8080" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "Pagine disponibili:" -ForegroundColor Yellow
-    Write-Host "  - Dashboard principale: http://localhost:8080" -ForegroundColor Gray
-    Write-Host "  - TestSuite: http://localhost:8080/testsuite" -ForegroundColor Gray
     Write-Host ""
     Write-Host "Per fermare la dashboard: docker compose down" -ForegroundColor Gray
     Write-Host "Per riavviare: docker compose up -d" -ForegroundColor Gray

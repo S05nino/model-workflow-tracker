@@ -9,7 +9,6 @@ services:
       - "8080:80"
     depends_on:
       - backend
-      - python-backend
     networks:
       - ml-workflow
 
@@ -25,25 +24,6 @@ services:
       # Monta la cartella OneDrive locale per il file JSON
       # Modifica questo percorso con la tua cartella OneDrive
       - ./data:/data
-    networks:
-      - ml-workflow
-
-  python-backend:
-    build:
-      context: docker/python-backend
-      dockerfile: Dockerfile.python
-    ports:
-      - "3002:3002"
-    environment:
-      - TEST_SUITE_PATH=/data/TEST_SUITE
-      - CE_PYTHON_PATH=/app/ce_python
-      - AZURE_BATCH_VM_PATH=/app/azure_batch
-      - AZURE_BATCH=true
-      - SERVICE_PRINCIPAL_CERT_THUMBPRINT=D0E4EB9FB0506DEF78ECF1283319760E980C1736
-      - SERVICE_PRINCIPAL_APP_ID=5fd0a365-b1c7-48c4-ba16-bdc211ddad84
-    volumes:
-      # Monta la cartella TEST_SUITE (copia locale della share di rete)
-      - ./data/TEST_SUITE:/data/TEST_SUITE
     networks:
       - ml-workflow
 

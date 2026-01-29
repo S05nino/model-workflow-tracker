@@ -25,32 +25,10 @@ STRUTTURA CARTELLA:
 - stop.ps1     = Ferma la dashboard
 - images/      = Immagini Docker pre-compilate
 
-PAGINE DISPONIBILI:
-- Dashboard principale: http://localhost:8080
-- TestSuite: http://localhost:8080/testsuite
-
 NOTE:
 - I dati sono salvati nel file data.json su OneDrive
 - Le modifiche si sincronizzano automaticamente tra colleghi
 - Evitate modifiche simultanee allo stesso record
-
-TESTSUITE:
-Per usare la TestSuite, devi popolare la cartella TEST_SUITE 
-nella cartella OneDrive con la seguente struttura:
-
-  TEST_SUITE/
-  ├── AT/
-  │   └── Consumer/
-  │       ├── model/
-  │       │   ├── prod/          <- modelli .zip in produzione
-  │       │   ├── develop/       <- modelli .zip in sviluppo
-  │       │   └── expertrules/   <- regole esperte (opzionale)
-  │       └── sample/            <- file .tsv.gz di input
-  ├── DE/
-  │   ├── Consumer/
-  │   ├── Business/
-  │   └── Tagger/
-  └── ...
 
 PROBLEMI?
 - Verifica che Docker Desktop sia in esecuzione

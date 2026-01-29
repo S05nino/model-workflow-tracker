@@ -5,7 +5,6 @@ import { NewProjectDialog } from '@/components/NewProjectDialog';
 import { DashboardStats } from '@/components/DashboardStats';
 import { FilterBar } from '@/components/FilterBar';
 import { ReleasesSection } from '@/components/ReleasesSection';
-import { NavLink } from '@/components/NavLink';
 import { ProjectStatus, Segment, TestType } from '@/types/project';
 import { Brain, Workflow, Download } from 'lucide-react';
 import { toast } from 'sonner';
@@ -90,8 +89,8 @@ const Index = () => {
             <div className="flex gap-2">
               <Button
                 variant="outline"
-                onClick={async () => {
-                  const fileName = await exportDashboardReport(projects, releases, countries);
+              onClick={async () => {
+                const fileName = await exportDashboardReport(projects, releases, countries);
                   toast.success('Report esportato', {
                     description: `File ${fileName} scaricato`,
                   });
@@ -112,19 +111,10 @@ const Index = () => {
 
         {/* Tabs for Projects and Releases */}
         <Tabs defaultValue="projects" className="animate-fade-in" style={{ animationDelay: '0.2s' }}>
-          <div className="flex items-center justify-between mb-6">
-            <TabsList>
-              <TabsTrigger value="projects">Progetti</TabsTrigger>
-              <TabsTrigger value="releases">Rilasci</TabsTrigger>
-            </TabsList>
-            <NavLink 
-              to="/testsuite" 
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors"
-            >
-              <Workflow className="w-4 h-4" />
-              TestSuite
-            </NavLink>
-          </div>
+          <TabsList className="mb-6">
+            <TabsTrigger value="projects">Progetti</TabsTrigger>
+            <TabsTrigger value="releases">Rilasci</TabsTrigger>
+          </TabsList>
 
           <TabsContent value="projects" className="space-y-6">
             {/* Filters */}
