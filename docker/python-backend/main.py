@@ -16,15 +16,12 @@ from pydantic import BaseModel
 # Add ce_python to path (CategorizationEnginePython code)
 CE_PYTHON_PATH = os.environ.get("CE_PYTHON_PATH", "/app/ce_python")
 sys.path.append(CE_PYTHON_PATH)
-# Add the suite_tests folder to path (actual structure: CategorizationEngineTests/suite_tests/)
-sys.path.append(os.path.join(CE_PYTHON_PATH, "CategorizationEngineTests", "suite_tests"))
-# Also add CategorizationEngine_release for dependencies
-sys.path.append(os.path.join(CE_PYTHON_PATH, "CategorizationEngine_release"))
+sys.path.append(os.path.join(CE_PYTHON_PATH, "CategorizationEngineTests", "CETestSuite"))
 
 # Import TestRunner modules (will fail gracefully if not present)
 try:
-    from testRunner import TestRunner
-    from testRunner_tagger import TestRunner as TestRunnerTagger
+    from suite_tests.testRunner import TestRunner
+    from suite_tests.testRunner_tagger import TestRunner as TestRunnerTagger
     TESTRUNNER_AVAILABLE = True
 except ImportError as e:
     print(f"Warning: TestRunner not available: {e}")
