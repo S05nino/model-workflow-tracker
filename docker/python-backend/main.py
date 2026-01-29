@@ -44,43 +44,60 @@ if os.path.exists(CE_PYTHON_PATH):
             if f == "testRunner.py":
                 print(f"Found testRunner.py at: {root}")
 
-# Import TestRunner modules (will fail gracefully if not present)
+# Import TestRunner modules using importlib.util (works without __init__.py)
+import importlib.util
+
 TESTRUNNER_AVAILABLE = False
 TestRunner = None
 TestRunnerTagger = None
 
-# Prova diversi pattern di import
-import_patterns = [
-    ("suite_tests.testRunner", "TestRunner"),
-    ("testRunner", "TestRunner"),
-]
+def import_module_from_path(module_name: str, file_path: str):
+    """Import a module directly from file path without requiring __init__.py"""
+    if not os.path.exists(file_path):
+        return None
+    try:
+        spec = importlib.util.spec_from_file_location(module_name, file_path)
+        if spec and spec.loader:
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[module_name] = module
+            spec.loader.exec_module(module)
+            return module
+    except Exception as e:
+        print(f"Error loading {file_path}: {e}")
+    return None
 
-for module_name, class_name in import_patterns:
+# Cerca testRunner.py in tutte le possibili posizioni
+testrunner_paths = []
+for root, dirs, files in os.walk(CE_PYTHON_PATH):
+    for f in files:
+        if f == "testRunner.py":
+            testrunner_paths.append(os.path.join(root, f))
+            print(f"Found testRunner.py at: {os.path.join(root, f)}")
+
+# Prova a importare da ogni percorso trovato
+for tr_path in testrunner_paths:
     if TESTRUNNER_AVAILABLE:
         break
-    try:
-        module = __import__(module_name, fromlist=[class_name])
-        TestRunner = getattr(module, class_name)
-        print(f"Successfully imported TestRunner from {module_name}")
+    print(f"Trying to import TestRunner from: {tr_path}")
+    module = import_module_from_path("testRunner", tr_path)
+    if module and hasattr(module, "TestRunner"):
+        TestRunner = module.TestRunner
         TESTRUNNER_AVAILABLE = True
-    except ImportError as e:
-        print(f"Failed to import from {module_name}: {e}")
-
-# Import Tagger
-if TESTRUNNER_AVAILABLE:
-    try:
-        from suite_tests.testRunner_tagger import TestRunner as TestRunnerTagger
-        print("Successfully imported TestRunnerTagger from suite_tests.testRunner_tagger")
-    except ImportError:
-        try:
-            from testRunner_tagger import TestRunner as TestRunnerTagger
-            print("Successfully imported TestRunnerTagger from testRunner_tagger")
-        except ImportError as e:
-            print(f"Warning: TestRunnerTagger not available: {e}")
-            TestRunnerTagger = None
+        print(f"Successfully imported TestRunner from {tr_path}")
+        
+        # Cerca anche testRunner_tagger.py nella stessa cartella
+        tagger_path = os.path.join(os.path.dirname(tr_path), "testRunner_tagger.py")
+        if os.path.exists(tagger_path):
+            tagger_module = import_module_from_path("testRunner_tagger", tagger_path)
+            if tagger_module and hasattr(tagger_module, "TestRunner"):
+                TestRunnerTagger = tagger_module.TestRunner
+                print(f"Successfully imported TestRunnerTagger from {tagger_path}")
 
 if not TESTRUNNER_AVAILABLE:
     print("WARNING: TestRunner not available - check ce_python folder structure")
+    print(f"Searched in: {CE_PYTHON_PATH}")
+    if testrunner_paths:
+        print(f"Found files but couldn't import: {testrunner_paths}")
 
 app = FastAPI(title="TestSuite API", version="1.0.0")
 
