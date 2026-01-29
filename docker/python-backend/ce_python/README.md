@@ -6,11 +6,16 @@ This folder should contain the CategorizationEnginePython repository.
 
 ```
 ce_python/
+├── CategorizationEngine_release/
+│   ├── Classifier/
+│   ├── Commons/
+│   └── Taxonomy/
 ├── CategorizationEngineTests/
-│   └── CETestSuite/
-│       └── suite_tests/
-│           ├── testRunner.py
-│           └── testRunner_tagger.py
+│   ├── data/
+│   └── suite_tests/
+│       ├── testRunner.py
+│       ├── testRunner_tagger.py
+│       └── ... (other metric files)
 └── ... (other files from the repository)
 ```
 
