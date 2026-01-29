@@ -14,7 +14,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # Add ce_python to path (CategorizationEnginePython code)
+# Support both structures:
+# 1. ce_python/CategorizationEnginePython/... (user copied the folder)
+# 2. ce_python/CategorizationEngineTests/... (user copied contents)
 CE_PYTHON_PATH = os.environ.get("CE_PYTHON_PATH", "/app/ce_python")
+
+# Check if CategorizationEnginePython subfolder exists
+if os.path.isdir(os.path.join(CE_PYTHON_PATH, "CategorizationEnginePython")):
+    CE_PYTHON_PATH = os.path.join(CE_PYTHON_PATH, "CategorizationEnginePython")
+
 sys.path.append(CE_PYTHON_PATH)
 sys.path.append(os.path.join(CE_PYTHON_PATH, "CategorizationEngineTests", "CETestSuite"))
 
