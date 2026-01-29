@@ -14,18 +14,73 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # Add ce_python to path (CategorizationEnginePython code)
+# Supporta diverse strutture di cartelle
 CE_PYTHON_PATH = os.environ.get("CE_PYTHON_PATH", "/app/ce_python")
-sys.path.append(CE_PYTHON_PATH)
-sys.path.append(os.path.join(CE_PYTHON_PATH, "CategorizationEngineTests", "CETestSuite"))
+
+# Possibili percorsi dove trovare suite_tests:
+# 1. ce_python/CategorizationEngineTests/CETestSuite/suite_tests/
+# 2. ce_python/CategorizationEnginePython/CategorizationEngineTests/CETestSuite/suite_tests/
+# 3. ce_python/suite_tests/ (se copiato direttamente)
+possible_paths = [
+    CE_PYTHON_PATH,
+    os.path.join(CE_PYTHON_PATH, "CategorizationEngineTests", "CETestSuite"),
+    os.path.join(CE_PYTHON_PATH, "CategorizationEnginePython", "CategorizationEngineTests", "CETestSuite"),
+    os.path.join(CE_PYTHON_PATH, "CategorizationEngineTests", "CETestSuite", "suite_tests"),
+    os.path.join(CE_PYTHON_PATH, "CategorizationEnginePython", "CategorizationEngineTests", "CETestSuite", "suite_tests"),
+]
+
+for p in possible_paths:
+    if os.path.isdir(p):
+        sys.path.insert(0, p)
+        print(f"Added to path: {p}")
+
+# Debug: stampa cosa c'è in ce_python
+print(f"CE_PYTHON_PATH: {CE_PYTHON_PATH}")
+if os.path.exists(CE_PYTHON_PATH):
+    print(f"Contents of {CE_PYTHON_PATH}: {os.listdir(CE_PYTHON_PATH)}")
+    # Cerca ricorsivamente testRunner.py
+    for root, dirs, files in os.walk(CE_PYTHON_PATH):
+        for f in files:
+            if f == "testRunner.py":
+                print(f"Found testRunner.py at: {root}")
 
 # Import TestRunner modules (will fail gracefully if not present)
-try:
-    from suite_tests.testRunner import TestRunner
-    from suite_tests.testRunner_tagger import TestRunner as TestRunnerTagger
-    TESTRUNNER_AVAILABLE = True
-except ImportError as e:
-    print(f"Warning: TestRunner not available: {e}")
-    TESTRUNNER_AVAILABLE = False
+TESTRUNNER_AVAILABLE = False
+TestRunner = None
+TestRunnerTagger = None
+
+# Prova diversi pattern di import
+import_patterns = [
+    ("suite_tests.testRunner", "TestRunner"),
+    ("testRunner", "TestRunner"),
+]
+
+for module_name, class_name in import_patterns:
+    if TESTRUNNER_AVAILABLE:
+        break
+    try:
+        module = __import__(module_name, fromlist=[class_name])
+        TestRunner = getattr(module, class_name)
+        print(f"Successfully imported TestRunner from {module_name}")
+        TESTRUNNER_AVAILABLE = True
+    except ImportError as e:
+        print(f"Failed to import from {module_name}: {e}")
+
+# Import Tagger
+if TESTRUNNER_AVAILABLE:
+    try:
+        from suite_tests.testRunner_tagger import TestRunner as TestRunnerTagger
+        print("Successfully imported TestRunnerTagger from suite_tests.testRunner_tagger")
+    except ImportError:
+        try:
+            from testRunner_tagger import TestRunner as TestRunnerTagger
+            print("Successfully imported TestRunnerTagger from testRunner_tagger")
+        except ImportError as e:
+            print(f"Warning: TestRunnerTagger not available: {e}")
+            TestRunnerTagger = None
+
+if not TESTRUNNER_AVAILABLE:
+    print("WARNING: TestRunner not available - check ce_python folder structure")
 
 app = FastAPI(title="TestSuite API", version="1.0.0")
 
