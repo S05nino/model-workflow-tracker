@@ -5,6 +5,7 @@ import { NewProjectDialog } from '@/components/NewProjectDialog';
 import { DashboardStats } from '@/components/DashboardStats';
 import { FilterBar } from '@/components/FilterBar';
 import { ReleasesSection } from '@/components/ReleasesSection';
+import { TestSuiteSection } from '@/components/TestSuiteSection';
 import { ProjectStatus, Segment, TestType } from '@/types/project';
 import { Brain, Workflow, Download } from 'lucide-react';
 import { toast } from 'sonner';
@@ -114,6 +115,7 @@ const Index = () => {
           <TabsList className="mb-6">
             <TabsTrigger value="projects">Progetti</TabsTrigger>
             <TabsTrigger value="releases">Rilasci</TabsTrigger>
+            <TabsTrigger value="testsuite">TestSuite</TabsTrigger>
           </TabsList>
 
           <TabsContent value="projects" className="space-y-6">
@@ -196,6 +198,10 @@ const Index = () => {
 
           <TabsContent value="releases">
             <ReleasesSection />
+          </TabsContent>
+
+          <TabsContent value="testsuite">
+            <TestSuiteSection />
           </TabsContent>
         </Tabs>
       </div>
