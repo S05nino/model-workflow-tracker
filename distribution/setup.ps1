@@ -24,7 +24,7 @@ Write-Host "Utente rilevato: $inputUsername" -ForegroundColor Cyan
 # Costruisci il percorso automaticamente
 $dataFolder = "C:\Users\$inputUsername\OneDrive - CRIF SpA\CE"
 
-Write-Host "Percorso utilizzato: $dataFolder" -ForegroundColor Cyan
+Write-Host "Percorso dati utilizzato: $dataFolder" -ForegroundColor Cyan
 
 # Verifica che il percorso esista
 if (-not (Test-Path $dataFolder)) {
@@ -62,9 +62,34 @@ if (-not (Test-Path $dataFile)) {
 
 Write-Host "Percorso dati OK!" -ForegroundColor Green
 
+# Chiedi il percorso di CategorizationEnginePython
+Write-Host ""
+Write-Host "========================================" -ForegroundColor Yellow
+Write-Host "  Configurazione Test Suite Python" -ForegroundColor Yellow
+Write-Host "========================================" -ForegroundColor Yellow
+Write-Host ""
+Write-Host "Inserisci il percorso della cartella CategorizationEnginePython" -ForegroundColor Cyan
+Write-Host "(es. C:\_git\CategorizationEnginePython)" -ForegroundColor Gray
+Write-Host ""
+$cePythonFolder = Read-Host "Percorso"
+
+if ([string]::IsNullOrWhiteSpace($cePythonFolder)) {
+    $cePythonFolder = "C:\_git\CategorizationEnginePython"
+    Write-Host "Usando percorso di default: $cePythonFolder" -ForegroundColor Yellow
+}
+
+if (-not (Test-Path $cePythonFolder)) {
+    Write-Host "ATTENZIONE: Il percorso '$cePythonFolder' non esiste." -ForegroundColor Yellow
+    Write-Host "La Test Suite non funzionera' finche' non avrai il codice Python." -ForegroundColor Yellow
+    Write-Host "Puoi comunque usare la dashboard per Progetti e Rilasci." -ForegroundColor Gray
+} else {
+    Write-Host "Percorso Python OK!" -ForegroundColor Green
+}
+
 # Importa le immagini Docker se presenti
 $frontendImage = Join-Path $PSScriptRoot "images\frontend.tar"
 $backendImage = Join-Path $PSScriptRoot "images\backend.tar"
+$pythonImage = Join-Path $PSScriptRoot "images\python.tar"
 
 if (Test-Path $frontendImage) {
     Write-Host ""
@@ -87,9 +112,21 @@ if (Test-Path $backendImage) {
     exit 1
 }
 
+if (Test-Path $pythonImage) {
+    Write-Host "Importazione immagine python..." -ForegroundColor Yellow
+    docker load -i $pythonImage
+    Write-Host "Python importato!" -ForegroundColor Green
+} else {
+    Write-Host "ATTENZIONE: Immagine python.tar non trovata in 'images\'" -ForegroundColor Yellow
+    Write-Host "La Test Suite non sara' disponibile." -ForegroundColor Yellow
+}
+
 # Salva il percorso in un file .env per docker-compose
 $envFile = Join-Path $PSScriptRoot ".env"
-"DATA_FOLDER=$dataFolder" | Out-File -FilePath $envFile -Encoding UTF8
+@"
+DATA_FOLDER=$dataFolder
+CE_PYTHON_FOLDER=$cePythonFolder
+"@ | Out-File -FilePath $envFile -Encoding UTF8
 
 # Avvia i container
 Write-Host ""
@@ -105,6 +142,11 @@ if ($?) {
     Write-Host "========================================" -ForegroundColor Green
     Write-Host ""
     Write-Host "Apri il browser e vai su: http://localhost:8080" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "Servizi disponibili:" -ForegroundColor Gray
+    Write-Host "  - Frontend:  http://localhost:8080" -ForegroundColor Gray
+    Write-Host "  - Backend:   http://localhost:3001" -ForegroundColor Gray
+    Write-Host "  - Python:    http://localhost:3002" -ForegroundColor Gray
     Write-Host ""
     Write-Host "Per fermare la dashboard: docker compose down" -ForegroundColor Gray
     Write-Host "Per riavviare: docker compose up -d" -ForegroundColor Gray

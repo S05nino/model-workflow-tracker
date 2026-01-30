@@ -5,6 +5,7 @@ services:
       - "8080:80"
     depends_on:
       - backend
+      - python
     networks:
       - ml-workflow
 
@@ -17,6 +18,23 @@ services:
     volumes:
       # Questo percorso viene sostituito dallo script setup.ps1
       - "${DATA_FOLDER}:/data"
+    networks:
+      - ml-workflow
+
+  python:
+    image: ml-workflow-python:latest
+    ports:
+      - "3002:3002"
+    environment:
+      - TEST_SUITE_DATA_PATH=/data/TEST_SUITE
+      - AZURE_BATCH_VM_PATH=C:\Users\kq5simmarine\AppData\Local\Categorization.Classifier.NoJWT\Utils\Categorization.Classifier.Batch.AzureDataScience
+      - CERT_THUMBPRINT=D0E4EB9FB0506DEF78ECF1283319760E980C1736
+      - APP_ID=5fd0a365-b1c7-48c4-ba16-bdc211ddad84
+    volumes:
+      # Dati TEST_SUITE da OneDrive
+      - "${DATA_FOLDER}/TEST_SUITE:/data/TEST_SUITE"
+      # Codice CategorizationEnginePython
+      - "${CE_PYTHON_FOLDER}:/app/CategorizationEnginePython"
     networks:
       - ml-workflow
 

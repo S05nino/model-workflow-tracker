@@ -1,0 +1,500 @@
+"""
+FastAPI server that wraps the TestRunner for ML model testing.
+This server exposes REST APIs that the frontend can call to execute tests.
+"""
+
+from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import Optional, List
+import os
+import sys
+import json
+import datetime
+import traceback
+import glob
+
+# Add the CategorizationEnginePython paths
+CE_PYTHON_PATH = "/app/CategorizationEnginePython"
+CE_TESTS_PATH = os.path.join(CE_PYTHON_PATH, "CategorizationEngineTests", "CETestSuite")
+
+sys.path.insert(0, CE_PYTHON_PATH)
+sys.path.insert(0, CE_TESTS_PATH)
+
+app = FastAPI(title="CE Test Suite API", version="1.0.0")
+
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Data path for test suite files (mounted volume)
+DATA_ROOT = os.environ.get("TEST_SUITE_DATA_PATH", "/data/TEST_SUITE")
+
+# Azure Batch settings (can be overridden via environment)
+AZURE_BATCH_VM_PATH = os.environ.get(
+    "AZURE_BATCH_VM_PATH",
+    r"C:\Users\kq5simmarine\AppData\Local\Categorization.Classifier.NoJWT\Utils\Categorization.Classifier.Batch.AzureDataScience"
+)
+CERT_THUMBPRINT = os.environ.get("CERT_THUMBPRINT", "D0E4EB9FB0506DEF78ECF1283319760E980C1736")
+APP_ID = os.environ.get("APP_ID", "5fd0a365-b1c7-48c4-ba16-bdc211ddad84")
+
+# Store running tests status
+test_runs = {}
+
+
+class TestConfigBase(BaseModel):
+    country: str
+    segment: str  # Consumer, Business, Tagger
+    version: str
+    old_model: str
+    new_model: str
+    vm_bench: int = 1
+    vm_dev: int = 2
+    azure_batch: bool = True
+
+
+class ConsumerBusinessConfig(TestConfigBase):
+    old_expert_rules: Optional[str] = None
+    new_expert_rules: Optional[str] = None
+    accuracy_files: List[str] = []
+    anomalies_files: List[str] = []
+    precision_files: List[str] = []
+    stability_files: List[str] = []
+
+
+class TaggerConfig(TestConfigBase):
+    company_list: str
+    distribution_data: str
+
+
+class TestRunResponse(BaseModel):
+    run_id: str
+    status: str
+    message: str
+
+
+class TestStatusResponse(BaseModel):
+    run_id: str
+    status: str  # pending, running, completed, failed
+    progress: Optional[int] = None
+    message: Optional[str] = None
+    result: Optional[dict] = None
+
+
+@app.get("/health")
+def health_check():
+    """Health check endpoint"""
+    ce_available = os.path.exists(CE_TESTS_PATH)
+    data_available = os.path.exists(DATA_ROOT)
+    
+    return {
+        "status": "ok",
+        "ce_python_available": ce_available,
+        "ce_python_path": CE_TESTS_PATH,
+        "data_available": data_available,
+        "data_root": DATA_ROOT
+    }
+
+
+@app.get("/api/testsuite/countries")
+def list_countries():
+    """List available countries in the test suite folder"""
+    if not os.path.exists(DATA_ROOT):
+        return {"countries": [], "error": f"Data root not found: {DATA_ROOT}"}
+    
+    countries = [
+        d for d in os.listdir(DATA_ROOT)
+        if os.path.isdir(os.path.join(DATA_ROOT, d))
+    ]
+    return {"countries": sorted(countries)}
+
+
+@app.get("/api/testsuite/segments/{country}")
+def list_segments(country: str):
+    """List available segments for a country"""
+    country_path = os.path.join(DATA_ROOT, country)
+    if not os.path.exists(country_path):
+        raise HTTPException(status_code=404, detail=f"Country not found: {country}")
+    
+    segments = [
+        d for d in os.listdir(country_path)
+        if os.path.isdir(os.path.join(country_path, d)) and d in ["Consumer", "Business", "Tagger"]
+    ]
+    return {"segments": segments}
+
+
+@app.get("/api/testsuite/files/{country}/{segment}")
+def list_files(country: str, segment: str):
+    """List available files for a country/segment combination"""
+    segment_path = os.path.join(DATA_ROOT, country, segment)
+    if not os.path.exists(segment_path):
+        raise HTTPException(status_code=404, detail=f"Segment path not found: {segment_path}")
+    
+    result = {
+        "sample_files": [],
+        "prod_models": [],
+        "dev_models": [],
+        "expert_rules_old": [],
+        "expert_rules_new": [],
+        "tagger_models": [],
+        "company_lists": []
+    }
+    
+    # Sample files (.tsv.gz)
+    sample_path = os.path.join(segment_path, "sample")
+    if os.path.exists(sample_path):
+        result["sample_files"] = [
+            f for f in os.listdir(sample_path)
+            if f.endswith(".tsv.gz")
+        ]
+        result["company_lists"] = [
+            f for f in os.listdir(sample_path)
+            if f.endswith(".xlsx") and "compan" in f.lower()
+        ]
+    
+    model_path = os.path.join(segment_path, "model")
+    
+    if segment in ["Consumer", "Business"]:
+        # Prod models
+        prod_path = os.path.join(model_path, "prod")
+        if os.path.exists(prod_path):
+            result["prod_models"] = [f for f in os.listdir(prod_path) if f.endswith(".zip")]
+        
+        # Dev models
+        dev_path = os.path.join(model_path, "develop")
+        if os.path.exists(dev_path):
+            result["dev_models"] = [f for f in os.listdir(dev_path) if f.endswith(".zip")]
+        
+        # Expert rules
+        expert_path = os.path.join(model_path, "expertrules")
+        if os.path.exists(expert_path):
+            # Check for old/new subfolders
+            old_path = os.path.join(expert_path, "old")
+            new_path = os.path.join(expert_path, "new")
+            
+            if os.path.exists(old_path):
+                result["expert_rules_old"] = [f for f in os.listdir(old_path) if f.endswith(".zip")]
+            if os.path.exists(new_path):
+                result["expert_rules_new"] = [f for f in os.listdir(new_path) if f.endswith(".zip")]
+            
+            # If no old/new folders, list files directly
+            if not result["expert_rules_old"] and not result["expert_rules_new"]:
+                all_rules = [f for f in os.listdir(expert_path) if f.endswith(".zip")]
+                result["expert_rules_old"] = all_rules
+                result["expert_rules_new"] = all_rules
+    
+    elif segment == "Tagger":
+        # Tagger models are directly in model folder
+        if os.path.exists(model_path):
+            result["tagger_models"] = [f for f in os.listdir(model_path) if f.endswith(".zip")]
+    
+    return result
+
+
+def run_consumer_business_tests(run_id: str, config: ConsumerBusinessConfig):
+    """Background task to run Consumer/Business tests"""
+    try:
+        test_runs[run_id]["status"] = "running"
+        test_runs[run_id]["message"] = "Initializing TestRunner..."
+        
+        # Import TestRunner
+        from suite_tests.testRunner import TestRunner
+        
+        today = datetime.date.today().strftime("%y%m%d")
+        segment_path = os.path.join(DATA_ROOT, config.country, config.segment)
+        output_folder = os.path.join(segment_path, f"{config.version}_{today}")
+        os.makedirs(output_folder, exist_ok=True)
+        
+        # Model paths
+        old_model_path = os.path.join(segment_path, "model", "prod", config.old_model)
+        new_model_path = os.path.join(segment_path, "model", "develop", config.new_model)
+        
+        # Expert rules paths
+        expert_path = os.path.join(segment_path, "model", "expertrules")
+        old_expert = None
+        new_expert = None
+        
+        if config.old_expert_rules:
+            # Try old subfolder first, then main folder
+            old_subfolder = os.path.join(expert_path, "old", config.old_expert_rules)
+            if os.path.exists(old_subfolder):
+                old_expert = old_subfolder
+            else:
+                old_expert = os.path.join(expert_path, config.old_expert_rules)
+        
+        if config.new_expert_rules:
+            new_subfolder = os.path.join(expert_path, "new", config.new_expert_rules)
+            if os.path.exists(new_subfolder):
+                new_expert = new_subfolder
+            else:
+                new_expert = os.path.join(expert_path, config.new_expert_rules)
+        
+        test_runs[run_id]["message"] = "Creating TestRunner instance..."
+        
+        runner = TestRunner(
+            old_model_path,
+            new_model_path,
+            output_folder,
+            old_expert,
+            new_expert
+        )
+        
+        # Crossvalidation
+        test_runs[run_id]["message"] = "Running crossvalidation..."
+        test_runs[run_id]["progress"] = 10
+        runner.compute_crossvalidation_score(
+            old_expert_rules_zip_path=old_expert,
+            new_expert_rules_zip_path=new_expert,
+            save=True
+        )
+        
+        sample_path = os.path.join(segment_path, "sample")
+        total_tests = len(config.accuracy_files) + len(config.anomalies_files) + \
+                     len(config.precision_files) + len(config.stability_files)
+        current_test = 0
+        
+        # Accuracy tests
+        for i, f in enumerate(config.accuracy_files, start=1):
+            current_test += 1
+            test_runs[run_id]["message"] = f"Running accuracy test {i}/{len(config.accuracy_files)}..."
+            test_runs[run_id]["progress"] = 10 + int((current_test / total_tests) * 80)
+            
+            runner.compute_validation_scores(
+                os.path.join(sample_path, f),
+                save=True,
+                tag=f"A_{i}",
+                azure_batch=config.azure_batch,
+                azure_batch_vm_path=AZURE_BATCH_VM_PATH,
+                old_expert_rules_zip_path=old_expert,
+                new_expert_rules_zip_path=new_expert,
+                ServicePrincipal_CertificateThumbprint=CERT_THUMBPRINT,
+                ServicePrincipal_ApplicationId=APP_ID,
+                vm_for_bench=config.vm_bench,
+                vm_for_dev=config.vm_dev
+            )
+        
+        # Anomalies tests
+        for f in config.anomalies_files:
+            current_test += 1
+            test_runs[run_id]["message"] = f"Running anomalies test..."
+            test_runs[run_id]["progress"] = 10 + int((current_test / total_tests) * 80)
+            
+            runner.compute_validation_scores(
+                os.path.join(sample_path, f),
+                save=True,
+                tag="ANOM",
+                azure_batch=config.azure_batch,
+                azure_batch_vm_path=AZURE_BATCH_VM_PATH,
+                old_expert_rules_zip_path=old_expert,
+                new_expert_rules_zip_path=new_expert,
+                ServicePrincipal_CertificateThumbprint=CERT_THUMBPRINT,
+                ServicePrincipal_ApplicationId=APP_ID,
+                vm_for_bench=config.vm_bench,
+                vm_for_dev=config.vm_dev
+            )
+        
+        # Precision tests
+        for f in config.precision_files:
+            current_test += 1
+            test_runs[run_id]["message"] = f"Running precision test..."
+            test_runs[run_id]["progress"] = 10 + int((current_test / total_tests) * 80)
+            
+            runner.compute_validation_scores(
+                os.path.join(sample_path, f),
+                save=True,
+                tag="PREC",
+                azure_batch=config.azure_batch,
+                azure_batch_vm_path=AZURE_BATCH_VM_PATH,
+                old_expert_rules_zip_path=old_expert,
+                new_expert_rules_zip_path=new_expert,
+                ServicePrincipal_CertificateThumbprint=CERT_THUMBPRINT,
+                ServicePrincipal_ApplicationId=APP_ID,
+                vm_for_bench=config.vm_bench,
+                vm_for_dev=config.vm_dev
+            )
+        
+        # Stability tests
+        for i, f in enumerate(config.stability_files, start=1):
+            current_test += 1
+            test_runs[run_id]["message"] = f"Running stability test {i}/{len(config.stability_files)}..."
+            test_runs[run_id]["progress"] = 10 + int((current_test / total_tests) * 80)
+            
+            runner.compute_validation_distribution(
+                os.path.join(sample_path, f),
+                save=True,
+                tag=f"S_{i}",
+                azure_batch=config.azure_batch,
+                azure_batch_vm_path=AZURE_BATCH_VM_PATH,
+                old_expert_rules_zip_path=old_expert,
+                new_expert_rules_zip_path=new_expert,
+                ServicePrincipal_CertificateThumbprint=CERT_THUMBPRINT,
+                ServicePrincipal_ApplicationId=APP_ID,
+                vm_for_bench=config.vm_bench,
+                vm_for_dev=config.vm_dev
+            )
+        
+        # Save reports
+        test_runs[run_id]["message"] = "Saving reports..."
+        test_runs[run_id]["progress"] = 95
+        runner.save_reports(weights=None, excel=True, pdf=False)
+        
+        test_runs[run_id]["status"] = "completed"
+        test_runs[run_id]["progress"] = 100
+        test_runs[run_id]["message"] = "Tests completed successfully!"
+        test_runs[run_id]["result"] = {
+            "output_folder": output_folder,
+            "report_path": os.path.join(output_folder, runner.old_uid, f"{runner.new_uid}_final_report_{runner.now}.xlsx")
+        }
+        
+    except Exception as e:
+        test_runs[run_id]["status"] = "failed"
+        test_runs[run_id]["message"] = f"Error: {str(e)}"
+        test_runs[run_id]["error"] = traceback.format_exc()
+
+
+def run_tagger_tests(run_id: str, config: TaggerConfig):
+    """Background task to run Tagger tests"""
+    try:
+        test_runs[run_id]["status"] = "running"
+        test_runs[run_id]["message"] = "Initializing Tagger TestRunner..."
+        
+        from suite_tests.testRunner_tagger import TestRunner as TestRunnerTagger
+        
+        today = datetime.date.today().strftime("%y%m%d")
+        segment_path = os.path.join(DATA_ROOT, config.country, "Tagger")
+        output_folder = os.path.join(segment_path, f"{config.version}_{today}")
+        os.makedirs(output_folder, exist_ok=True)
+        
+        model_path = os.path.join(segment_path, "model")
+        old_model_path = os.path.join(model_path, config.old_model)
+        new_model_path = os.path.join(model_path, config.new_model)
+        
+        sample_path = os.path.join(segment_path, "sample")
+        company_list_path = os.path.join(sample_path, config.company_list)
+        distribution_path = os.path.join(sample_path, config.distribution_data)
+        
+        test_runs[run_id]["message"] = "Creating Tagger TestRunner..."
+        test_runs[run_id]["progress"] = 10
+        
+        runner = TestRunnerTagger(old_model_path, new_model_path, output_folder)
+        
+        # Crossvalidation
+        test_runs[run_id]["message"] = "Running tagger crossvalidation..."
+        test_runs[run_id]["progress"] = 30
+        runner.compute_tagger_crossvalidation_score(save=True)
+        
+        # Validation distribution
+        test_runs[run_id]["message"] = "Running tagger validation distribution..."
+        test_runs[run_id]["progress"] = 60
+        runner.compute_tagger_validation_distribution(
+            validation_data_path=distribution_path,
+            save=True,
+            azure_batch=config.azure_batch,
+            azure_batch_vm_path=AZURE_BATCH_VM_PATH,
+            path_list_companies=company_list_path,
+            ServicePrincipal_CertificateThumbprint=CERT_THUMBPRINT,
+            ServicePrincipal_ApplicationId=APP_ID,
+            vm_for_bench=config.vm_bench,
+            vm_for_dev=config.vm_dev
+        )
+        
+        # Save reports
+        test_runs[run_id]["message"] = "Saving reports..."
+        test_runs[run_id]["progress"] = 90
+        runner.save_tagger_reports(excel=True)
+        
+        test_runs[run_id]["status"] = "completed"
+        test_runs[run_id]["progress"] = 100
+        test_runs[run_id]["message"] = "Tagger tests completed successfully!"
+        test_runs[run_id]["result"] = {
+            "output_folder": output_folder
+        }
+        
+    except Exception as e:
+        test_runs[run_id]["status"] = "failed"
+        test_runs[run_id]["message"] = f"Error: {str(e)}"
+        test_runs[run_id]["error"] = traceback.format_exc()
+
+
+@app.post("/api/testsuite/run/consumer-business", response_model=TestRunResponse)
+async def run_consumer_business(config: ConsumerBusinessConfig, background_tasks: BackgroundTasks):
+    """Start a Consumer/Business test run"""
+    run_id = f"{config.country}_{config.segment}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    
+    test_runs[run_id] = {
+        "status": "pending",
+        "progress": 0,
+        "message": "Test queued...",
+        "config": config.dict()
+    }
+    
+    background_tasks.add_task(run_consumer_business_tests, run_id, config)
+    
+    return TestRunResponse(
+        run_id=run_id,
+        status="pending",
+        message="Test run started"
+    )
+
+
+@app.post("/api/testsuite/run/tagger", response_model=TestRunResponse)
+async def run_tagger(config: TaggerConfig, background_tasks: BackgroundTasks):
+    """Start a Tagger test run"""
+    run_id = f"{config.country}_Tagger_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    
+    test_runs[run_id] = {
+        "status": "pending",
+        "progress": 0,
+        "message": "Tagger test queued...",
+        "config": config.dict()
+    }
+    
+    background_tasks.add_task(run_tagger_tests, run_id, config)
+    
+    return TestRunResponse(
+        run_id=run_id,
+        status="pending",
+        message="Tagger test run started"
+    )
+
+
+@app.get("/api/testsuite/status/{run_id}", response_model=TestStatusResponse)
+def get_test_status(run_id: str):
+    """Get the status of a test run"""
+    if run_id not in test_runs:
+        raise HTTPException(status_code=404, detail="Test run not found")
+    
+    run = test_runs[run_id]
+    return TestStatusResponse(
+        run_id=run_id,
+        status=run.get("status", "unknown"),
+        progress=run.get("progress"),
+        message=run.get("message"),
+        result=run.get("result")
+    )
+
+
+@app.get("/api/testsuite/runs")
+def list_test_runs():
+    """List all test runs"""
+    return {
+        "runs": [
+            {
+                "run_id": run_id,
+                "status": run.get("status"),
+                "progress": run.get("progress"),
+                "message": run.get("message")
+            }
+            for run_id, run in test_runs.items()
+        ]
+    }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=3002)

@@ -1,0 +1,17 @@
+# Placeholder for CategorizationEnginePython folder
+# 
+# You need to copy the following structure here:
+#
+# CategorizationEnginePython/
+# ├── CategorizationEngine_release/
+# │   ├── Classifier/
+# │   ├── Commons/
+# │   ├── Taxonomy/
+# │   └── Trainer/
+# └── CategorizationEngineTests/
+#     └── CETestSuite/
+#         ├── data/
+#         ├── suite_tests/
+#         │   ├── testRunner.py
+#         │   └── testRunner_tagger.py
+#         └── utils/
