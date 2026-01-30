@@ -1,20 +1,18 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
-import { Copy, FileText, Play, Settings2, FlaskConical, FolderOpen } from 'lucide-react';
+import { Play, Settings2, FlaskConical, FolderOpen, Loader2, CheckCircle2, XCircle, RefreshCw } from 'lucide-react';
 
-// Countries available in the test suite (matching the Python root folder structure)
-const TEST_SUITE_COUNTRIES = [
-  'AUT', 'BEL', 'CZK', 'DEU', 'ESP', 'FRA', 'GBR', 'IND', 'IRL', 'ITA', 'ITA2', 'MEX', 'POL', 'PRT', 'USA'
-];
+// Python backend URL
+const PYTHON_API_URL = import.meta.env.VITE_PYTHON_API_URL || 'http://localhost:3002';
 
 type Segment = 'Consumer' | 'Business' | 'Tagger';
 
@@ -37,10 +35,31 @@ interface TestConfig {
   distributionData: string;
 }
 
+interface FileOptions {
+  sample_files: string[];
+  prod_models: string[];
+  dev_models: string[];
+  expert_rules_old: string[];
+  expert_rules_new: string[];
+  tagger_models: string[];
+  company_lists: string[];
+}
+
+interface TestRun {
+  run_id: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  progress?: number;
+  message?: string;
+  result?: {
+    output_folder?: string;
+    report_path?: string;
+  };
+}
+
 const defaultConfig: TestConfig = {
   country: '',
   segment: 'Consumer',
-  version: 'x.x.x',
+  version: '',
   oldModel: '',
   newModel: '',
   oldExpertRules: '',
@@ -57,223 +76,220 @@ const defaultConfig: TestConfig = {
 
 export const TestSuiteSection = () => {
   const [config, setConfig] = useState<TestConfig>(defaultConfig);
-  const [fileInputs, setFileInputs] = useState({
-    accuracy: '',
-    anomalies: '',
-    precision: '',
-    stability: '',
+  const [countries, setCountries] = useState<string[]>([]);
+  const [segments, setSegments] = useState<string[]>([]);
+  const [fileOptions, setFileOptions] = useState<FileOptions>({
+    sample_files: [],
+    prod_models: [],
+    dev_models: [],
+    expert_rules_old: [],
+    expert_rules_new: [],
+    tagger_models: [],
+    company_lists: []
   });
+  const [isLoading, setIsLoading] = useState(false);
+  const [currentRun, setCurrentRun] = useState<TestRun | null>(null);
+  const [apiAvailable, setApiAvailable] = useState<boolean | null>(null);
 
-  const rootFolder = '\\\\sassrv04\\DA_WWCC1\\1_Global_Analytics_Consultancy\\R1_2\\PRODUCT\\CE\\01_Data\\TEST_SUITE';
+  // Check API availability
+  const checkApiHealth = useCallback(async () => {
+    try {
+      const response = await fetch(`${PYTHON_API_URL}/health`);
+      const data = await response.json();
+      setApiAvailable(data.status === 'ok' && data.ce_python_available);
+      return data;
+    } catch {
+      setApiAvailable(false);
+      return null;
+    }
+  }, []);
+
+  // Load countries on mount
+  useEffect(() => {
+    const init = async () => {
+      const health = await checkApiHealth();
+      if (health?.status === 'ok') {
+        try {
+          const response = await fetch(`${PYTHON_API_URL}/api/testsuite/countries`);
+          const data = await response.json();
+          setCountries(data.countries || []);
+        } catch (err) {
+          console.error('Failed to load countries:', err);
+        }
+      }
+    };
+    init();
+  }, [checkApiHealth]);
+
+  // Load segments when country changes
+  useEffect(() => {
+    if (!config.country) {
+      setSegments([]);
+      return;
+    }
+    
+    const loadSegments = async () => {
+      try {
+        const response = await fetch(`${PYTHON_API_URL}/api/testsuite/segments/${config.country}`);
+        const data = await response.json();
+        setSegments(data.segments || []);
+        
+        // Reset segment if not available
+        if (data.segments && !data.segments.includes(config.segment)) {
+          setConfig(prev => ({ ...prev, segment: data.segments[0] || 'Consumer' }));
+        }
+      } catch (err) {
+        console.error('Failed to load segments:', err);
+      }
+    };
+    loadSegments();
+  }, [config.country]);
+
+  // Load files when country/segment changes
+  useEffect(() => {
+    if (!config.country || !config.segment) {
+      setFileOptions({
+        sample_files: [],
+        prod_models: [],
+        dev_models: [],
+        expert_rules_old: [],
+        expert_rules_new: [],
+        tagger_models: [],
+        company_lists: []
+      });
+      return;
+    }
+
+    const loadFiles = async () => {
+      try {
+        const response = await fetch(`${PYTHON_API_URL}/api/testsuite/files/${config.country}/${config.segment}`);
+        const data = await response.json();
+        setFileOptions(data);
+      } catch (err) {
+        console.error('Failed to load files:', err);
+      }
+    };
+    loadFiles();
+  }, [config.country, config.segment]);
+
+  // Poll for test status
+  useEffect(() => {
+    if (!currentRun || currentRun.status === 'completed' || currentRun.status === 'failed') {
+      return;
+    }
+
+    const pollStatus = async () => {
+      try {
+        const response = await fetch(`${PYTHON_API_URL}/api/testsuite/status/${currentRun.run_id}`);
+        const data = await response.json();
+        setCurrentRun(data);
+
+        if (data.status === 'completed') {
+          toast.success('Test completati!', {
+            description: `Report salvato in: ${data.result?.output_folder || 'cartella output'}`,
+          });
+        } else if (data.status === 'failed') {
+          toast.error('Test falliti', {
+            description: data.message,
+          });
+        }
+      } catch (err) {
+        console.error('Failed to poll status:', err);
+      }
+    };
+
+    const interval = setInterval(pollStatus, 2000);
+    return () => clearInterval(interval);
+  }, [currentRun]);
 
   const updateConfig = (key: keyof TestConfig, value: string | number | string[]) => {
     setConfig(prev => ({ ...prev, [key]: value }));
   };
 
-  const addFileToList = (type: 'accuracyFiles' | 'anomaliesFiles' | 'precisionFiles' | 'stabilityFiles', inputKey: keyof typeof fileInputs) => {
-    const fileName = fileInputs[inputKey].trim();
-    if (fileName && !config[type].includes(fileName)) {
-      updateConfig(type, [...config[type], fileName]);
-      setFileInputs(prev => ({ ...prev, [inputKey]: '' }));
+  const toggleFileInList = (type: 'accuracyFiles' | 'anomaliesFiles' | 'precisionFiles' | 'stabilityFiles', fileName: string) => {
+    const currentList = config[type];
+    if (currentList.includes(fileName)) {
+      updateConfig(type, currentList.filter(f => f !== fileName));
+    } else {
+      updateConfig(type, [...currentList, fileName]);
     }
   };
 
-  const removeFileFromList = (type: 'accuracyFiles' | 'anomaliesFiles' | 'precisionFiles' | 'stabilityFiles', fileName: string) => {
-    updateConfig(type, config[type].filter(f => f !== fileName));
-  };
-
-  const generatePythonCommand = (): string => {
-    const today = new Date().toISOString().slice(2, 10).replace(/-/g, '');
-    const segmentPath = `${rootFolder}\\${config.country}\\${config.segment}`;
-    const outputFolder = `${segmentPath}\\${config.version}_${today}`;
-    
-    if (config.segment === 'Tagger') {
-      return `# Tagger Test Configuration
-# ===========================
-# Country: ${config.country}
-# Segment: ${config.segment}
-# Version: ${config.version}
-# Date: ${today}
-
-from suite_tests.testRunner_tagger import TestRunner
-
-old_model_path = r"${segmentPath}\\model\\${config.oldModel}"
-new_model_path = r"${segmentPath}\\model\\${config.newModel}"
-output_folder = r"${outputFolder}"
-path_list_companies = r"${segmentPath}\\sample\\${config.companyList}"
-distribution_data_path = r"${segmentPath}\\sample\\${config.distributionData}"
-
-runner = TestRunner(old_model_path, new_model_path, output_folder)
-
-# Crossvalidation
-runner.compute_tagger_crossvalidation_score(save=True)
-
-# Validation distribution
-runner.compute_tagger_validation_distribution(
-    validation_data_path=distribution_data_path,
-    save=True,
-    azure_batch=True,
-    azure_batch_vm_path=r"C:\\Users\\kq5simmarine\\AppData\\Local\\Categorization.Classifier.NoJWT\\Utils\\Categorization.Classifier.Batch.AzureDataScience",
-    path_list_companies=path_list_companies,
-    ServicePrincipal_CertificateThumbprint='D0E4EB9FB0506DEF78ECF1283319760E980C1736',
-    ServicePrincipal_ApplicationId='5fd0a365-b1c7-48c4-ba16-bdc211ddad84',
-    vm_for_bench=${config.vmBench},
-    vm_for_dev=${config.vmDev}
-)
-
-# Save reports
-runner.save_tagger_reports(excel=True)
-`;
-    }
-
-    // Consumer/Business
-    const modelProdPath = `${segmentPath}\\model\\prod\\${config.oldModel}`;
-    const modelDevPath = `${segmentPath}\\model\\develop\\${config.newModel}`;
-    const expertOldPath = config.oldExpertRules ? `r"${segmentPath}\\model\\expertrules\\${config.oldExpertRules}"` : 'None';
-    const expertNewPath = config.newExpertRules ? `r"${segmentPath}\\model\\expertrules\\${config.newExpertRules}"` : 'None';
-
-    let testBlocks = '';
-
-    if (config.accuracyFiles.length > 0) {
-      config.accuracyFiles.forEach((f, i) => {
-        testBlocks += `
-# Accuracy test ${i + 1}
-runner.compute_validation_scores(
-    r"${segmentPath}\\sample\\${f}",
-    save=True,
-    tag="A_${i + 1}",
-    azure_batch=True,
-    azure_batch_vm_path=azure_batch_vm_path,
-    old_expert_rules_zip_path=${expertOldPath},
-    new_expert_rules_zip_path=${expertNewPath},
-    ServicePrincipal_CertificateThumbprint=thumbprint,
-    ServicePrincipal_ApplicationId=app_id,
-    vm_for_bench=${config.vmBench},
-    vm_for_dev=${config.vmDev}
-)
-`;
+  const runTests = async () => {
+    if (!isConfigValid()) {
+      toast.error('Configurazione incompleta', {
+        description: 'Compila tutti i campi obbligatori',
       });
+      return;
     }
 
-    if (config.anomaliesFiles.length > 0) {
-      config.anomaliesFiles.forEach((f) => {
-        testBlocks += `
-# Anomalies test
-runner.compute_validation_scores(
-    r"${segmentPath}\\sample\\${f}",
-    save=True,
-    tag="ANOM",
-    azure_batch=True,
-    azure_batch_vm_path=azure_batch_vm_path,
-    old_expert_rules_zip_path=${expertOldPath},
-    new_expert_rules_zip_path=${expertNewPath},
-    ServicePrincipal_CertificateThumbprint=thumbprint,
-    ServicePrincipal_ApplicationId=app_id,
-    vm_for_bench=${config.vmBench},
-    vm_for_dev=${config.vmDev}
-)
-`;
+    setIsLoading(true);
+
+    try {
+      const endpoint = config.segment === 'Tagger' 
+        ? `${PYTHON_API_URL}/api/testsuite/run/tagger`
+        : `${PYTHON_API_URL}/api/testsuite/run/consumer-business`;
+
+      const payload = config.segment === 'Tagger'
+        ? {
+            country: config.country,
+            segment: config.segment,
+            version: config.version,
+            old_model: config.oldModel,
+            new_model: config.newModel,
+            vm_bench: config.vmBench,
+            vm_dev: config.vmDev,
+            company_list: config.companyList,
+            distribution_data: config.distributionData,
+          }
+        : {
+            country: config.country,
+            segment: config.segment,
+            version: config.version,
+            old_model: config.oldModel,
+            new_model: config.newModel,
+            old_expert_rules: config.oldExpertRules || null,
+            new_expert_rules: config.newExpertRules || null,
+            accuracy_files: config.accuracyFiles,
+            anomalies_files: config.anomaliesFiles,
+            precision_files: config.precisionFiles,
+            stability_files: config.stabilityFiles,
+            vm_bench: config.vmBench,
+            vm_dev: config.vmDev,
+          };
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
-    }
 
-    if (config.precisionFiles.length > 0) {
-      config.precisionFiles.forEach((f) => {
-        testBlocks += `
-# Precision test
-runner.compute_validation_scores(
-    r"${segmentPath}\\sample\\${f}",
-    save=True,
-    tag="PREC",
-    azure_batch=True,
-    azure_batch_vm_path=azure_batch_vm_path,
-    old_expert_rules_zip_path=${expertOldPath},
-    new_expert_rules_zip_path=${expertNewPath},
-    ServicePrincipal_CertificateThumbprint=thumbprint,
-    ServicePrincipal_ApplicationId=app_id,
-    vm_for_bench=${config.vmBench},
-    vm_for_dev=${config.vmDev}
-)
-`;
+      const data = await response.json();
+      
+      if (response.ok) {
+        setCurrentRun({
+          run_id: data.run_id,
+          status: 'pending',
+          progress: 0,
+          message: 'Test avviati...',
+        });
+        toast.success('Test avviati!', {
+          description: `Run ID: ${data.run_id}`,
+        });
+      } else {
+        throw new Error(data.detail || 'Errore durante l\'avvio dei test');
+      }
+    } catch (err) {
+      toast.error('Errore', {
+        description: err instanceof Error ? err.message : 'Impossibile avviare i test',
       });
+    } finally {
+      setIsLoading(false);
     }
-
-    if (config.stabilityFiles.length > 0) {
-      config.stabilityFiles.forEach((f, i) => {
-        testBlocks += `
-# Stability test ${i + 1}
-runner.compute_validation_distribution(
-    r"${segmentPath}\\sample\\${f}",
-    save=True,
-    tag="S_${i + 1}",
-    azure_batch=True,
-    azure_batch_vm_path=azure_batch_vm_path,
-    old_expert_rules_zip_path=${expertOldPath},
-    new_expert_rules_zip_path=${expertNewPath},
-    ServicePrincipal_CertificateThumbprint=thumbprint,
-    ServicePrincipal_ApplicationId=app_id,
-    vm_for_bench=${config.vmBench},
-    vm_for_dev=${config.vmDev}
-)
-`;
-      });
-    }
-
-    return `# Test Configuration
-# ==================
-# Country: ${config.country}
-# Segment: ${config.segment}
-# Version: ${config.version}
-# Date: ${today}
-
-from suite_tests.testRunner import TestRunner
-import os
-
-# Paths
-old_model_path = r"${modelProdPath}"
-new_model_path = r"${modelDevPath}"
-output_folder = r"${outputFolder}"
-old_expert_rules = ${expertOldPath}
-new_expert_rules = ${expertNewPath}
-
-# Azure Batch config
-azure_batch_vm_path = r"C:\\Users\\kq5simmarine\\AppData\\Local\\Categorization.Classifier.NoJWT\\Utils\\Categorization.Classifier.Batch.AzureDataScience"
-thumbprint = 'D0E4EB9FB0506DEF78ECF1283319760E980C1736'
-app_id = '5fd0a365-b1c7-48c4-ba16-bdc211ddad84'
-
-# Create output folder
-os.makedirs(output_folder, exist_ok=True)
-
-# Initialize runner
-runner = TestRunner(
-    old_model_path,
-    new_model_path,
-    output_folder,
-    old_expert_rules,
-    new_expert_rules
-)
-
-# Crossvalidation
-runner.compute_crossvalidation_score(
-    old_expert_rules_zip_path=old_expert_rules,
-    new_expert_rules_zip_path=new_expert_rules,
-    save=True
-)
-${testBlocks}
-# Save reports
-runner.save_reports(weights=None, excel=True, pdf=False)
-`;
-  };
-
-  const copyToClipboard = () => {
-    const command = generatePythonCommand();
-    navigator.clipboard.writeText(command);
-    toast.success('Script Python copiato!', {
-      description: 'Incollalo nel tuo ambiente Python per eseguire i test',
-    });
   };
 
   const isConfigValid = () => {
-    if (!config.country || !config.version || config.version === 'x.x.x') return false;
+    if (!config.country || !config.version) return false;
     
     if (config.segment === 'Tagger') {
       return !!(config.oldModel && config.newModel && config.distributionData);
@@ -283,6 +299,62 @@ runner.save_reports(weights=None, excel=True, pdf=False)
       (config.accuracyFiles.length > 0 || config.anomaliesFiles.length > 0 || 
        config.precisionFiles.length > 0 || config.stabilityFiles.length > 0));
   };
+
+  const getStatusIcon = () => {
+    if (!currentRun) return null;
+    switch (currentRun.status) {
+      case 'pending':
+      case 'running':
+        return <Loader2 className="w-4 h-4 animate-spin" />;
+      case 'completed':
+        return <CheckCircle2 className="w-4 h-4 text-green-500" />;
+      case 'failed':
+        return <XCircle className="w-4 h-4 text-destructive" />;
+      default:
+        return null;
+    }
+  };
+
+  if (apiAvailable === null) {
+    return (
+      <Card className="glass-card">
+        <CardContent className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+          <span className="ml-3 text-muted-foreground">Connessione al backend Python...</span>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (apiAvailable === false) {
+    return (
+      <Card className="glass-card border-destructive/50">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-destructive">
+            <XCircle className="w-5 h-5" />
+            Backend Python non disponibile
+          </CardTitle>
+          <CardDescription>
+            Il container Python non è raggiungibile. Assicurati che Docker sia in esecuzione.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Per avviare la Test Suite, esegui:
+            </p>
+            <code className="block p-3 bg-muted rounded-md text-sm">
+              docker-compose up -d
+            </code>
+            <Button variant="outline" onClick={checkApiHealth}>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Riprova connessione
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -297,12 +369,43 @@ runner.save_reports(weights=None, excel=True, pdf=False)
               <CardTitle className="text-lg">Model Performance Test Suite</CardTitle>
               <CardDescription className="flex items-center gap-2 mt-1">
                 <FolderOpen className="w-4 h-4" />
-                <code className="text-xs bg-muted px-2 py-0.5 rounded">{rootFolder}</code>
+                <span className="text-xs">Backend Python connesso</span>
+                <Badge variant="outline" className="text-xs bg-green-500/10 text-green-600 border-green-500/30">
+                  Online
+                </Badge>
               </CardDescription>
             </div>
           </div>
         </CardHeader>
       </Card>
+
+      {/* Current Run Status */}
+      {currentRun && (
+        <Card className="glass-card">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              {getStatusIcon()}
+              Test Run: {currentRun.run_id}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">{currentRun.message}</span>
+              <Badge variant={currentRun.status === 'completed' ? 'default' : currentRun.status === 'failed' ? 'destructive' : 'secondary'}>
+                {currentRun.status}
+              </Badge>
+            </div>
+            {currentRun.progress !== undefined && currentRun.status !== 'completed' && currentRun.status !== 'failed' && (
+              <Progress value={currentRun.progress} className="h-2" />
+            )}
+            {currentRun.result?.output_folder && (
+              <p className="text-xs text-muted-foreground">
+                Output: <code className="bg-muted px-1 py-0.5 rounded">{currentRun.result.output_folder}</code>
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Configuration Panel */}
@@ -323,7 +426,7 @@ runner.save_reports(weights=None, excel=True, pdf=False)
                     <SelectValue placeholder="Seleziona paese" />
                   </SelectTrigger>
                   <SelectContent>
-                    {TEST_SUITE_COUNTRIES.map(c => (
+                    {countries.map(c => (
                       <SelectItem key={c} value={c}>{c}</SelectItem>
                     ))}
                   </SelectContent>
@@ -337,18 +440,24 @@ runner.save_reports(weights=None, excel=True, pdf=False)
                   onValueChange={(v) => updateConfig('segment', v as Segment)}
                   className="flex gap-4"
                 >
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="Consumer" id="consumer" />
-                    <Label htmlFor="consumer" className="cursor-pointer">Consumer</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="Business" id="business" />
-                    <Label htmlFor="business" className="cursor-pointer">Business</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="Tagger" id="tagger" />
-                    <Label htmlFor="tagger" className="cursor-pointer">Tagger</Label>
-                  </div>
+                  {segments.includes('Consumer') && (
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="Consumer" id="consumer" />
+                      <Label htmlFor="consumer" className="cursor-pointer">Consumer</Label>
+                    </div>
+                  )}
+                  {segments.includes('Business') && (
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="Business" id="business" />
+                      <Label htmlFor="business" className="cursor-pointer">Business</Label>
+                    </div>
+                  )}
+                  {segments.includes('Tagger') && (
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="Tagger" id="tagger" />
+                      <Label htmlFor="tagger" className="cursor-pointer">Tagger</Label>
+                    </div>
+                  )}
                 </RadioGroup>
               </div>
             </div>
@@ -359,7 +468,7 @@ runner.save_reports(weights=None, excel=True, pdf=False)
               <Input 
                 value={config.version}
                 onChange={(e) => updateConfig('version', e.target.value)}
-                placeholder="x.x.x"
+                placeholder="es. 1.2.3"
               />
             </div>
 
@@ -371,29 +480,39 @@ runner.save_reports(weights=None, excel=True, pdf=False)
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label className="text-sm text-muted-foreground">
-                    {config.segment === 'Tagger' ? 'Old Model (.zip)' : 'Old Model (prod)'}
+                    {config.segment === 'Tagger' ? 'Old Model' : 'Old Model (prod)'}
                   </Label>
-                  <Input 
-                    value={config.oldModel}
-                    onChange={(e) => updateConfig('oldModel', e.target.value)}
-                    placeholder="model_name.zip"
-                  />
+                  <Select value={config.oldModel} onValueChange={(v) => updateConfig('oldModel', v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleziona modello" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(config.segment === 'Tagger' ? fileOptions.tagger_models : fileOptions.prod_models).map(m => (
+                        <SelectItem key={m} value={m}>{m}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label className="text-sm text-muted-foreground">
-                    {config.segment === 'Tagger' ? 'New Model (.zip)' : 'New Model (develop)'}
+                    {config.segment === 'Tagger' ? 'New Model' : 'New Model (develop)'}
                   </Label>
-                  <Input 
-                    value={config.newModel}
-                    onChange={(e) => updateConfig('newModel', e.target.value)}
-                    placeholder="model_name.zip"
-                  />
+                  <Select value={config.newModel} onValueChange={(v) => updateConfig('newModel', v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleziona modello" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(config.segment === 'Tagger' ? fileOptions.tagger_models : fileOptions.dev_models).map(m => (
+                        <SelectItem key={m} value={m}>{m}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </div>
 
             {/* Expert Rules (only for Consumer/Business) */}
-            {config.segment !== 'Tagger' && (
+            {config.segment !== 'Tagger' && fileOptions.expert_rules_old.length > 0 && (
               <>
                 <Separator />
                 <div className="space-y-4">
@@ -401,19 +520,31 @@ runner.save_reports(weights=None, excel=True, pdf=False)
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
                       <Label className="text-sm text-muted-foreground">Old Expert Rules</Label>
-                      <Input 
-                        value={config.oldExpertRules}
-                        onChange={(e) => updateConfig('oldExpertRules', e.target.value)}
-                        placeholder="rules.zip"
-                      />
+                      <Select value={config.oldExpertRules} onValueChange={(v) => updateConfig('oldExpertRules', v)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Nessuna" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">Nessuna</SelectItem>
+                          {fileOptions.expert_rules_old.map(r => (
+                            <SelectItem key={r} value={r}>{r}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-2">
                       <Label className="text-sm text-muted-foreground">New Expert Rules</Label>
-                      <Input 
-                        value={config.newExpertRules}
-                        onChange={(e) => updateConfig('newExpertRules', e.target.value)}
-                        placeholder="rules.zip"
-                      />
+                      <Select value={config.newExpertRules} onValueChange={(v) => updateConfig('newExpertRules', v)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Nessuna" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">Nessuna</SelectItem>
+                          {fileOptions.expert_rules_new.map(r => (
+                            <SelectItem key={r} value={r}>{r}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                 </div>
@@ -429,122 +560,37 @@ runner.save_reports(weights=None, excel=True, pdf=False)
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <Label className="text-sm text-muted-foreground">Company Normalization List</Label>
-                      <Input 
-                        value={config.companyList}
-                        onChange={(e) => updateConfig('companyList', e.target.value)}
-                        placeholder="list_companies.xlsx"
-                      />
+                      <Select value={config.companyList} onValueChange={(v) => updateConfig('companyList', v)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleziona file" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {fileOptions.company_lists.map(f => (
+                            <SelectItem key={f} value={f}>{f}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-2">
                       <Label className="text-sm text-muted-foreground">Distribution Data</Label>
-                      <Input 
-                        value={config.distributionData}
-                        onChange={(e) => updateConfig('distributionData', e.target.value)}
-                        placeholder="data.tsv.gz"
-                      />
+                      <Select value={config.distributionData} onValueChange={(v) => updateConfig('distributionData', v)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleziona file" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {fileOptions.sample_files.map(f => (
+                            <SelectItem key={f} value={f}>{f}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                 </div>
               </>
             )}
 
-            {/* Test Files (only for Consumer/Business) */}
-            {config.segment !== 'Tagger' && (
-              <>
-                <Separator />
-                <div className="space-y-4">
-                  <Label className="text-base font-semibold">Test Files (.tsv.gz)</Label>
-                  
-                  {/* Accuracy Files */}
-                  <div className="space-y-2">
-                    <Label className="text-sm text-muted-foreground">Accuracy Files</Label>
-                    <div className="flex gap-2">
-                      <Input 
-                        value={fileInputs.accuracy}
-                        onChange={(e) => setFileInputs(prev => ({ ...prev, accuracy: e.target.value }))}
-                        placeholder="file.tsv.gz"
-                        onKeyDown={(e) => e.key === 'Enter' && addFileToList('accuracyFiles', 'accuracy')}
-                      />
-                      <Button variant="outline" size="icon" onClick={() => addFileToList('accuracyFiles', 'accuracy')}>+</Button>
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {config.accuracyFiles.map(f => (
-                        <Badge key={f} variant="secondary" className="cursor-pointer" onClick={() => removeFileFromList('accuracyFiles', f)}>
-                          {f} ×
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Anomalies Files */}
-                  <div className="space-y-2">
-                    <Label className="text-sm text-muted-foreground">Anomalies Files</Label>
-                    <div className="flex gap-2">
-                      <Input 
-                        value={fileInputs.anomalies}
-                        onChange={(e) => setFileInputs(prev => ({ ...prev, anomalies: e.target.value }))}
-                        placeholder="file.tsv.gz"
-                        onKeyDown={(e) => e.key === 'Enter' && addFileToList('anomaliesFiles', 'anomalies')}
-                      />
-                      <Button variant="outline" size="icon" onClick={() => addFileToList('anomaliesFiles', 'anomalies')}>+</Button>
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {config.anomaliesFiles.map(f => (
-                        <Badge key={f} variant="secondary" className="cursor-pointer" onClick={() => removeFileFromList('anomaliesFiles', f)}>
-                          {f} ×
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Precision Files */}
-                  <div className="space-y-2">
-                    <Label className="text-sm text-muted-foreground">Precision Files</Label>
-                    <div className="flex gap-2">
-                      <Input 
-                        value={fileInputs.precision}
-                        onChange={(e) => setFileInputs(prev => ({ ...prev, precision: e.target.value }))}
-                        placeholder="file.tsv.gz"
-                        onKeyDown={(e) => e.key === 'Enter' && addFileToList('precisionFiles', 'precision')}
-                      />
-                      <Button variant="outline" size="icon" onClick={() => addFileToList('precisionFiles', 'precision')}>+</Button>
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {config.precisionFiles.map(f => (
-                        <Badge key={f} variant="secondary" className="cursor-pointer" onClick={() => removeFileFromList('precisionFiles', f)}>
-                          {f} ×
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Stability Files */}
-                  <div className="space-y-2">
-                    <Label className="text-sm text-muted-foreground">Stability Files</Label>
-                    <div className="flex gap-2">
-                      <Input 
-                        value={fileInputs.stability}
-                        onChange={(e) => setFileInputs(prev => ({ ...prev, stability: e.target.value }))}
-                        placeholder="file.tsv.gz"
-                        onKeyDown={(e) => e.key === 'Enter' && addFileToList('stabilityFiles', 'stability')}
-                      />
-                      <Button variant="outline" size="icon" onClick={() => addFileToList('stabilityFiles', 'stability')}>+</Button>
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {config.stabilityFiles.map(f => (
-                        <Badge key={f} variant="secondary" className="cursor-pointer" onClick={() => removeFileFromList('stabilityFiles', f)}>
-                          {f} ×
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
-
+            {/* Azure Batch VMs */}
             <Separator />
-
-            {/* Azure Batch Settings */}
             <div className="space-y-4">
               <Label className="text-base font-semibold">Azure Batch Settings</Label>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -553,12 +599,12 @@ runner.save_reports(weights=None, excel=True, pdf=False)
                   <RadioGroup 
                     value={String(config.vmBench)} 
                     onValueChange={(v) => updateConfig('vmBench', parseInt(v))}
-                    className="flex gap-4"
+                    className="flex gap-2"
                   >
                     {[1, 2, 3, 4].map(n => (
                       <div key={n} className="flex items-center space-x-1">
                         <RadioGroupItem value={String(n)} id={`vm-bench-${n}`} disabled={n === config.vmDev} />
-                        <Label htmlFor={`vm-bench-${n}`} className="cursor-pointer">{n}</Label>
+                        <Label htmlFor={`vm-bench-${n}`} className="cursor-pointer text-sm">{n}</Label>
                       </div>
                     ))}
                   </RadioGroup>
@@ -568,12 +614,12 @@ runner.save_reports(weights=None, excel=True, pdf=False)
                   <RadioGroup 
                     value={String(config.vmDev)} 
                     onValueChange={(v) => updateConfig('vmDev', parseInt(v))}
-                    className="flex gap-4"
+                    className="flex gap-2"
                   >
                     {[1, 2, 3, 4].map(n => (
                       <div key={n} className="flex items-center space-x-1">
                         <RadioGroupItem value={String(n)} id={`vm-dev-${n}`} disabled={n === config.vmBench} />
-                        <Label htmlFor={`vm-dev-${n}`} className="cursor-pointer">{n}</Label>
+                        <Label htmlFor={`vm-dev-${n}`} className="cursor-pointer text-sm">{n}</Label>
                       </div>
                     ))}
                   </RadioGroup>
@@ -583,34 +629,156 @@ runner.save_reports(weights=None, excel=True, pdf=False)
           </CardContent>
         </Card>
 
-        {/* Generated Script Panel */}
-        <Card className="glass-card">
-          <CardHeader>
-            <div className="flex items-center justify-between">
+        {/* Test Files Panel (Consumer/Business only) */}
+        {config.segment !== 'Tagger' && (
+          <Card className="glass-card">
+            <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <FileText className="w-5 h-5" />
-                Script Python
+                <FolderOpen className="w-5 h-5" />
+                Test Files
               </CardTitle>
-              <Button 
-                onClick={copyToClipboard} 
-                disabled={!isConfigValid()}
-                className="gap-2"
-              >
-                <Copy className="w-4 h-4" />
-                Copia Script
-              </Button>
-            </div>
-            <CardDescription>
-              Configura i parametri a sinistra, poi copia lo script generato per eseguirlo nel tuo ambiente Python
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <pre className="bg-muted/50 p-4 rounded-lg overflow-auto max-h-[600px] text-xs font-mono whitespace-pre-wrap">
-              {isConfigValid() ? generatePythonCommand() : '# Completa la configurazione per generare lo script\n# Campi obbligatori:\n# - Country\n# - Version (diversa da x.x.x)\n# - Old Model e New Model\n# - Almeno un file di test (o distribution data per Tagger)'}
-            </pre>
-          </CardContent>
-        </Card>
+              <CardDescription>
+                Seleziona i file per ogni tipo di test
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Accuracy Files */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Accuracy Files</Label>
+                <div className="flex flex-wrap gap-1 min-h-[2rem] p-2 border rounded-md bg-muted/30">
+                  {fileOptions.sample_files.length === 0 ? (
+                    <span className="text-xs text-muted-foreground">Nessun file disponibile</span>
+                  ) : (
+                    fileOptions.sample_files.map(f => (
+                      <Badge 
+                        key={f} 
+                        variant={config.accuracyFiles.includes(f) ? "default" : "outline"}
+                        className="cursor-pointer text-xs"
+                        onClick={() => toggleFileInList('accuracyFiles', f)}
+                      >
+                        {f}
+                      </Badge>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Anomalies Files */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Anomalies Files</Label>
+                <div className="flex flex-wrap gap-1 min-h-[2rem] p-2 border rounded-md bg-muted/30">
+                  {fileOptions.sample_files.length === 0 ? (
+                    <span className="text-xs text-muted-foreground">Nessun file disponibile</span>
+                  ) : (
+                    fileOptions.sample_files.map(f => (
+                      <Badge 
+                        key={f} 
+                        variant={config.anomaliesFiles.includes(f) ? "default" : "outline"}
+                        className="cursor-pointer text-xs"
+                        onClick={() => toggleFileInList('anomaliesFiles', f)}
+                      >
+                        {f}
+                      </Badge>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Precision Files */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Precision Files</Label>
+                <div className="flex flex-wrap gap-1 min-h-[2rem] p-2 border rounded-md bg-muted/30">
+                  {fileOptions.sample_files.length === 0 ? (
+                    <span className="text-xs text-muted-foreground">Nessun file disponibile</span>
+                  ) : (
+                    fileOptions.sample_files.map(f => (
+                      <Badge 
+                        key={f} 
+                        variant={config.precisionFiles.includes(f) ? "default" : "outline"}
+                        className="cursor-pointer text-xs"
+                        onClick={() => toggleFileInList('precisionFiles', f)}
+                      >
+                        {f}
+                      </Badge>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Stability Files */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Stability Files</Label>
+                <div className="flex flex-wrap gap-1 min-h-[2rem] p-2 border rounded-md bg-muted/30">
+                  {fileOptions.sample_files.length === 0 ? (
+                    <span className="text-xs text-muted-foreground">Nessun file disponibile</span>
+                  ) : (
+                    fileOptions.sample_files.map(f => (
+                      <Badge 
+                        key={f} 
+                        variant={config.stabilityFiles.includes(f) ? "default" : "outline"}
+                        className="cursor-pointer text-xs"
+                        onClick={() => toggleFileInList('stabilityFiles', f)}
+                      >
+                        {f}
+                      </Badge>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Summary */}
+              <Separator />
+              <div className="text-sm text-muted-foreground">
+                <p>Test selezionati:</p>
+                <ul className="list-disc list-inside mt-1">
+                  {config.accuracyFiles.length > 0 && <li>Accuracy: {config.accuracyFiles.length} file</li>}
+                  {config.anomaliesFiles.length > 0 && <li>Anomalies: {config.anomaliesFiles.length} file</li>}
+                  {config.precisionFiles.length > 0 && <li>Precision: {config.precisionFiles.length} file</li>}
+                  {config.stabilityFiles.length > 0 && <li>Stability: {config.stabilityFiles.length} file</li>}
+                  {config.accuracyFiles.length === 0 && config.anomaliesFiles.length === 0 && 
+                   config.precisionFiles.length === 0 && config.stabilityFiles.length === 0 && (
+                    <li className="text-yellow-600">Nessun file selezionato</li>
+                  )}
+                </ul>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
+
+      {/* Run Button */}
+      <Card className="glass-card">
+        <CardContent className="pt-6">
+          <Button 
+            size="lg" 
+            className="w-full"
+            disabled={!isConfigValid() || isLoading || (currentRun?.status === 'running' || currentRun?.status === 'pending')}
+            onClick={runTests}
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                Avvio in corso...
+              </>
+            ) : currentRun?.status === 'running' || currentRun?.status === 'pending' ? (
+              <>
+                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                Test in esecuzione...
+              </>
+            ) : (
+              <>
+                <Play className="w-5 h-5 mr-2" />
+                Esegui Test Suite
+              </>
+            )}
+          </Button>
+          {!isConfigValid() && (
+            <p className="text-sm text-muted-foreground text-center mt-2">
+              Compila tutti i campi obbligatori per abilitare l'esecuzione
+            </p>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 };
