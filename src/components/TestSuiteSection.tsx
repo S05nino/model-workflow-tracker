@@ -135,15 +135,22 @@ export const TestSuiteSection = () => {
     const loadSegments = async () => {
       try {
         const response = await fetch(`${PYTHON_API_URL}/api/testsuite/segments/${config.country}`);
+        if (!response.ok) {
+          console.error('Failed to load segments:', response.status);
+          setSegments([]);
+          return;
+        }
         const data = await response.json();
-        setSegments(data.segments || []);
+        const loadedSegments = data.segments || [];
+        setSegments(loadedSegments);
         
-        // Reset segment if not available
-        if (data.segments && !data.segments.includes(config.segment)) {
-          setConfig(prev => ({ ...prev, segment: data.segments[0] || 'Consumer' }));
+        // Reset segment if not available, or set first available
+        if (loadedSegments.length > 0 && !loadedSegments.includes(config.segment)) {
+          setConfig(prev => ({ ...prev, segment: loadedSegments[0] as Segment }));
         }
       } catch (err) {
         console.error('Failed to load segments:', err);
+        setSegments([]);
       }
     };
     loadSegments();
@@ -151,28 +158,47 @@ export const TestSuiteSection = () => {
 
   // Load files when country/segment changes
   useEffect(() => {
+    const emptyOptions: FileOptions = {
+      sample_files: [],
+      prod_models: [],
+      dev_models: [],
+      expert_rules_old: [],
+      expert_rules_new: [],
+      tagger_models: [],
+      company_lists: [],
+      date_folder: undefined,
+      segment_folder: undefined
+    };
+    
     if (!config.country || !config.segment) {
-      setFileOptions({
-        sample_files: [],
-        prod_models: [],
-        dev_models: [],
-        expert_rules_old: [],
-        expert_rules_new: [],
-        tagger_models: [],
-        company_lists: [],
-        date_folder: undefined,
-        segment_folder: undefined
-      });
+      setFileOptions(emptyOptions);
       return;
     }
 
     const loadFiles = async () => {
       try {
         const response = await fetch(`${PYTHON_API_URL}/api/testsuite/files/${config.country}/${config.segment}`);
+        if (!response.ok) {
+          console.error('Failed to load files:', response.status);
+          setFileOptions(emptyOptions);
+          return;
+        }
         const data = await response.json();
-        setFileOptions(data);
+        // Ensure all arrays exist with defaults
+        setFileOptions({
+          sample_files: data.sample_files || [],
+          prod_models: data.prod_models || [],
+          dev_models: data.dev_models || [],
+          expert_rules_old: data.expert_rules_old || [],
+          expert_rules_new: data.expert_rules_new || [],
+          tagger_models: data.tagger_models || [],
+          company_lists: data.company_lists || [],
+          date_folder: data.date_folder,
+          segment_folder: data.segment_folder
+        });
       } catch (err) {
         console.error('Failed to load files:', err);
+        setFileOptions(emptyOptions);
       }
     };
     loadFiles();
