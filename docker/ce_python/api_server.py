@@ -6,7 +6,7 @@ This server exposes REST APIs that the frontend can call to execute tests.
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict
 import os
 import sys
 import json
@@ -116,24 +116,74 @@ def list_countries():
 
 @app.get("/api/testsuite/segments/{country}")
 def list_segments(country: str):
-    """List available segments for a country"""
+    """List available segments for a country (case-insensitive)"""
     country_path = os.path.join(DATA_ROOT, country)
     if not os.path.exists(country_path):
         raise HTTPException(status_code=404, detail=f"Country not found: {country}")
     
+    # Map lowercase folder names to proper segment names
+    segment_map = {
+        "consumer": "Consumer",
+        "business": "Business",
+        "tagger": "Tagger"
+    }
+    
     segments = [
-        d for d in os.listdir(country_path)
-        if os.path.isdir(os.path.join(country_path, d)) and d in ["Consumer", "Business", "Tagger"]
+        segment_map.get(d.lower(), d)
+        for d in os.listdir(country_path)
+        if os.path.isdir(os.path.join(country_path, d)) and d.lower() in segment_map
     ]
     return {"segments": segments}
 
 
+def find_segment_folder(country_path: str, segment: str) -> Optional[str]:
+    """Find the actual folder name for a segment (case-insensitive)"""
+    for d in os.listdir(country_path):
+        if d.lower() == segment.lower():
+            return d
+    return None
+
+
+def find_latest_date_folder(segment_path: str) -> Optional[str]:
+    """Find the most recent date folder in a segment path"""
+    date_folders = []
+    for d in os.listdir(segment_path):
+        folder_path = os.path.join(segment_path, d)
+        if os.path.isdir(folder_path):
+            # Check if it looks like a date folder (contains input/model/output)
+            if os.path.exists(os.path.join(folder_path, "input")) or \
+               os.path.exists(os.path.join(folder_path, "model")):
+                date_folders.append(d)
+    
+    if date_folders:
+        # Sort descending to get most recent
+        date_folders.sort(reverse=True)
+        return date_folders[0]
+    return None
+
+
 @app.get("/api/testsuite/files/{country}/{segment}")
 def list_files(country: str, segment: str):
-    """List available files for a country/segment combination"""
-    segment_path = os.path.join(DATA_ROOT, country, segment)
+    """List available files for a country/segment combination.
+    
+    Supports structure: country/segment/date_folder/input|model|output
+    """
+    country_path = os.path.join(DATA_ROOT, country)
+    if not os.path.exists(country_path):
+        raise HTTPException(status_code=404, detail=f"Country not found: {country}")
+    
+    # Find actual segment folder (case-insensitive)
+    actual_segment = find_segment_folder(country_path, segment)
+    if not actual_segment:
+        raise HTTPException(status_code=404, detail=f"Segment not found: {segment}")
+    
+    segment_path = os.path.join(country_path, actual_segment)
     if not os.path.exists(segment_path):
         raise HTTPException(status_code=404, detail=f"Segment path not found: {segment_path}")
+    
+    # Find the latest date folder
+    date_folder = find_latest_date_folder(segment_path)
+    work_path = os.path.join(segment_path, date_folder) if date_folder else segment_path
     
     result = {
         "sample_files": [],
@@ -142,24 +192,32 @@ def list_files(country: str, segment: str):
         "expert_rules_old": [],
         "expert_rules_new": [],
         "tagger_models": [],
-        "company_lists": []
+        "company_lists": [],
+        "date_folder": date_folder,
+        "segment_folder": actual_segment
     }
     
-    # Sample files (.tsv.gz)
-    sample_path = os.path.join(segment_path, "sample")
-    if os.path.exists(sample_path):
+    # Input files (.tsv.gz) - check both "input" and "sample" folders
+    input_path = os.path.join(work_path, "input")
+    if not os.path.exists(input_path):
+        input_path = os.path.join(segment_path, "sample")
+    
+    if os.path.exists(input_path):
         result["sample_files"] = [
-            f for f in os.listdir(sample_path)
-            if f.endswith(".tsv.gz")
+            f for f in os.listdir(input_path)
+            if f.endswith(".tsv.gz") or f.endswith(".tsv")
         ]
         result["company_lists"] = [
-            f for f in os.listdir(sample_path)
+            f for f in os.listdir(input_path)
             if f.endswith(".xlsx") and "compan" in f.lower()
         ]
     
-    model_path = os.path.join(segment_path, "model")
+    # Model path - check in date folder first, then segment folder
+    model_path = os.path.join(work_path, "model")
+    if not os.path.exists(model_path):
+        model_path = os.path.join(segment_path, "model")
     
-    if segment in ["Consumer", "Business"]:
+    if segment.lower() in ["consumer", "business"]:
         # Prod models
         prod_path = os.path.join(model_path, "prod")
         if os.path.exists(prod_path):
@@ -188,7 +246,7 @@ def list_files(country: str, segment: str):
                 result["expert_rules_old"] = all_rules
                 result["expert_rules_new"] = all_rules
     
-    elif segment == "Tagger":
+    elif segment.lower() == "tagger":
         # Tagger models are directly in model folder
         if os.path.exists(model_path):
             result["tagger_models"] = [f for f in os.listdir(model_path) if f.endswith(".zip")]
