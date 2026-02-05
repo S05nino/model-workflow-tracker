@@ -43,6 +43,8 @@ interface FileOptions {
   expert_rules_new: string[];
   tagger_models: string[];
   company_lists: string[];
+  date_folder?: string;
+  segment_folder?: string;
 }
 
 interface TestRun {
@@ -85,7 +87,9 @@ export const TestSuiteSection = () => {
     expert_rules_old: [],
     expert_rules_new: [],
     tagger_models: [],
-    company_lists: []
+    company_lists: [],
+    date_folder: undefined,
+    segment_folder: undefined
   });
   const [isLoading, setIsLoading] = useState(false);
   const [currentRun, setCurrentRun] = useState<TestRun | null>(null);
@@ -155,7 +159,9 @@ export const TestSuiteSection = () => {
         expert_rules_old: [],
         expert_rules_new: [],
         tagger_models: [],
-        company_lists: []
+        company_lists: [],
+        date_folder: undefined,
+        segment_folder: undefined
       });
       return;
     }
@@ -435,32 +441,47 @@ export const TestSuiteSection = () => {
               
               <div className="space-y-2">
                 <Label>Segment</Label>
-                <RadioGroup 
-                  value={config.segment} 
-                  onValueChange={(v) => updateConfig('segment', v as Segment)}
-                  className="flex gap-4"
-                >
-                  {segments.includes('Consumer') && (
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="Consumer" id="consumer" />
-                      <Label htmlFor="consumer" className="cursor-pointer">Consumer</Label>
-                    </div>
-                  )}
-                  {segments.includes('Business') && (
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="Business" id="business" />
-                      <Label htmlFor="business" className="cursor-pointer">Business</Label>
-                    </div>
-                  )}
-                  {segments.includes('Tagger') && (
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="Tagger" id="tagger" />
-                      <Label htmlFor="tagger" className="cursor-pointer">Tagger</Label>
-                    </div>
-                  )}
-                </RadioGroup>
+                {segments.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-2">
+                    {config.country ? 'Nessun segmento trovato' : 'Seleziona prima un paese'}
+                  </p>
+                ) : (
+                  <RadioGroup 
+                    value={config.segment} 
+                    onValueChange={(v) => updateConfig('segment', v as Segment)}
+                    className="flex gap-4"
+                  >
+                    {segments.includes('Consumer') && (
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="Consumer" id="consumer" />
+                        <Label htmlFor="consumer" className="cursor-pointer">Consumer</Label>
+                      </div>
+                    )}
+                    {segments.includes('Business') && (
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="Business" id="business" />
+                        <Label htmlFor="business" className="cursor-pointer">Business</Label>
+                      </div>
+                    )}
+                    {segments.includes('Tagger') && (
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="Tagger" id="tagger" />
+                        <Label htmlFor="tagger" className="cursor-pointer">Tagger</Label>
+                      </div>
+                    )}
+                  </RadioGroup>
+                )}
               </div>
             </div>
+            
+            {/* Date folder info */}
+            {fileOptions.date_folder && (
+              <div className="p-3 bg-muted/50 rounded-md">
+                <p className="text-xs text-muted-foreground">
+                  📁 Cartella di lavoro: <code className="bg-background px-1 py-0.5 rounded">{config.country}/{fileOptions.segment_folder}/{fileOptions.date_folder}</code>
+                </p>
+              </div>
+            )}
 
             {/* Version */}
             <div className="space-y-2">
