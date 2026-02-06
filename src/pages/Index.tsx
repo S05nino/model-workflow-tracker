@@ -6,6 +6,7 @@ import { DashboardStats } from '@/components/DashboardStats';
 import { FilterBar } from '@/components/FilterBar';
 import { ReleasesSection } from '@/components/ReleasesSection';
 import { TestSuiteSection } from '@/components/TestSuiteSection';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ProjectStatus, Segment, TestType } from '@/types/project';
 import { Brain, Workflow, Download } from 'lucide-react';
 import { toast } from 'sonner';
@@ -201,7 +202,9 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="testsuite">
-            <TestSuiteSection />
+            <ErrorBoundary fallbackTitle="Errore nella TestSuite">
+              <TestSuiteSection />
+            </ErrorBoundary>
           </TabsContent>
         </Tabs>
       </div>
