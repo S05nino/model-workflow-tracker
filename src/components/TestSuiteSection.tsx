@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { Play, Settings2, FlaskConical, FolderOpen, Loader2, CheckCircle2, XCircle, RefreshCw } from 'lucide-react';
+import { ErrorBoundary } from './ErrorBoundary';
 
 // Python backend URL
 const PYTHON_API_URL = import.meta.env.VITE_PYTHON_API_URL || 'http://localhost:3002';
@@ -94,15 +95,24 @@ export const TestSuiteSection = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [currentRun, setCurrentRun] = useState<TestRun | null>(null);
   const [apiAvailable, setApiAvailable] = useState<boolean | null>(null);
+  const [loadingSegments, setLoadingSegments] = useState(false);
+  const [loadingFiles, setLoadingFiles] = useState(false);
+  
+  // Refs to track current country/segment to avoid race conditions
+  const currentCountryRef = useRef<string>('');
+  const currentSegmentRef = useRef<string>('');
 
   // Check API availability
   const checkApiHealth = useCallback(async () => {
     try {
-      const response = await fetch(`${PYTHON_API_URL}/health`);
+      const response = await fetch(`${PYTHON_API_URL}/health`, { 
+        signal: AbortSignal.timeout(5000) 
+      });
       const data = await response.json();
       setApiAvailable(data.status === 'ok' && data.ce_python_available);
       return data;
-    } catch {
+    } catch (err) {
+      console.error('API health check failed:', err);
       setApiAvailable(false);
       return null;
     }
@@ -110,25 +120,52 @@ export const TestSuiteSection = () => {
 
   // Load countries on mount
   useEffect(() => {
+    const controller = new AbortController();
+    
     const init = async () => {
       const health = await checkApiHealth();
-      if (health?.status === 'ok') {
+      if (health?.status === 'ok' && !controller.signal.aborted) {
         try {
-          const response = await fetch(`${PYTHON_API_URL}/api/testsuite/countries`);
+          const response = await fetch(`${PYTHON_API_URL}/api/testsuite/countries`, {
+            signal: controller.signal
+          });
           const data = await response.json();
-          setCountries(data.countries || []);
+          if (!controller.signal.aborted) {
+            setCountries(Array.isArray(data.countries) ? data.countries : []);
+          }
         } catch (err) {
-          console.error('Failed to load countries:', err);
+          if (!controller.signal.aborted) {
+            console.error('Failed to load countries:', err);
+          }
         }
       }
     };
     init();
+    
+    return () => controller.abort();
   }, [checkApiHealth]);
 
   // Load segments when country changes
   useEffect(() => {
-    if (!config.country) {
+    const controller = new AbortController();
+    
+    // Track the country this effect is for
+    const effectCountry = config.country;
+    currentCountryRef.current = effectCountry;
+    
+    if (!effectCountry) {
       setSegments([]);
+      setFileOptions({
+        sample_files: [],
+        prod_models: [],
+        dev_models: [],
+        expert_rules_old: [],
+        expert_rules_new: [],
+        tagger_models: [],
+        company_lists: [],
+        date_folder: undefined,
+        segment_folder: undefined
+      });
       return;
     }
     
@@ -146,44 +183,73 @@ export const TestSuiteSection = () => {
     });
     
     const loadSegments = async () => {
+      setLoadingSegments(true);
       try {
-        const response = await fetch(`${PYTHON_API_URL}/api/testsuite/segments/${config.country}`);
+        const response = await fetch(`${PYTHON_API_URL}/api/testsuite/segments/${effectCountry}`, {
+          signal: controller.signal
+        });
+        
+        // Check if this effect is still valid
+        if (controller.signal.aborted || currentCountryRef.current !== effectCountry) {
+          return;
+        }
+        
         if (!response.ok) {
           console.error('Failed to load segments:', response.status, response.statusText);
           setSegments([]);
           toast.error('Errore caricamento segmenti', {
-            description: `Impossibile caricare i segmenti per ${config.country}`
+            description: `Impossibile caricare i segmenti per ${effectCountry}`
           });
           return;
         }
+        
         const data = await response.json();
-        const loadedSegments = data.segments || [];
+        
+        // Double-check we're still on the same country
+        if (currentCountryRef.current !== effectCountry) {
+          return;
+        }
+        
+        const loadedSegments = Array.isArray(data.segments) ? data.segments : [];
         console.log('Loaded segments:', loadedSegments);
         setSegments(loadedSegments);
         
         // Reset segment if not available, or set first available
         if (loadedSegments.length > 0) {
-          if (!loadedSegments.includes(config.segment)) {
-            setConfig(prev => ({ ...prev, segment: loadedSegments[0] as Segment }));
-          }
+          setConfig(prev => {
+            if (!loadedSegments.includes(prev.segment)) {
+              return { ...prev, segment: loadedSegments[0] as Segment };
+            }
+            return prev;
+          });
         } else {
           toast.warning('Nessun segmento trovato', {
-            description: `Il paese ${config.country} non contiene cartelle Consumer/Business/Tagger`
+            description: `Il paese ${effectCountry} non contiene cartelle Consumer/Business/Tagger`
           });
         }
       } catch (err) {
+        if (controller.signal.aborted) return;
         console.error('Failed to load segments:', err);
         setSegments([]);
         toast.error('Errore di connessione', {
           description: 'Impossibile connettersi al backend Python'
         });
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoadingSegments(false);
+        }
       }
     };
+    
     loadSegments();
+    
+    return () => controller.abort();
   }, [config.country]);
 
   // Load files when country/segment changes
   useEffect(() => {
+    const controller = new AbortController();
+    
     const emptyOptions: FileOptions = {
       sample_files: [],
       prod_models: [],
@@ -196,27 +262,45 @@ export const TestSuiteSection = () => {
       segment_folder: undefined
     };
     
-    if (!config.country || !config.segment || segments.length === 0) {
+    const effectCountry = config.country;
+    const effectSegment = config.segment;
+    currentSegmentRef.current = effectSegment;
+    
+    // Don't load files if we're still loading segments or if no segments available
+    if (!effectCountry || !effectSegment || segments.length === 0 || loadingSegments) {
       setFileOptions(emptyOptions);
       return;
     }
 
     const loadFiles = async () => {
+      setLoadingFiles(true);
       try {
-        console.log(`Loading files for ${config.country}/${config.segment}...`);
-        const response = await fetch(`${PYTHON_API_URL}/api/testsuite/files/${config.country}/${config.segment}`);
+        console.log(`Loading files for ${effectCountry}/${effectSegment}...`);
+        const response = await fetch(`${PYTHON_API_URL}/api/testsuite/files/${effectCountry}/${effectSegment}`, {
+          signal: controller.signal
+        });
+        
+        // Check if this effect is still valid
+        if (controller.signal.aborted || currentSegmentRef.current !== effectSegment) {
+          return;
+        }
         
         if (!response.ok) {
           console.error('Failed to load files:', response.status, response.statusText);
           setFileOptions(emptyOptions);
           toast.error('Errore caricamento file', {
-            description: `Impossibile caricare i file per ${config.country}/${config.segment}`
+            description: `Impossibile caricare i file per ${effectCountry}/${effectSegment}`
           });
           return;
         }
         
         const data = await response.json();
         console.log('Loaded file data:', data);
+        
+        // Double-check we're still on the same segment
+        if (currentSegmentRef.current !== effectSegment) {
+          return;
+        }
         
         // Check for error in response
         if (data.error) {
@@ -243,15 +327,24 @@ export const TestSuiteSection = () => {
           console.log(`Working folder detected: ${newOptions.date_folder}`);
         }
       } catch (err) {
+        if (controller.signal.aborted) return;
         console.error('Failed to load files:', err);
         setFileOptions(emptyOptions);
         toast.error('Errore di connessione', {
           description: 'Impossibile connettersi al backend Python per caricare i file'
         });
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoadingFiles(false);
+        }
       }
     };
+    
     loadFiles();
-  }, [config.country, config.segment, segments]);
+    
+    return () => controller.abort();
+  }, [config.country, config.segment, segments, loadingSegments]);
+
 
   // Poll for test status
   useEffect(() => {
@@ -516,7 +609,12 @@ export const TestSuiteSection = () => {
               
               <div className="space-y-2">
                 <Label>Segment</Label>
-                {segments.length === 0 ? (
+                {loadingSegments ? (
+                  <div className="flex items-center gap-2 py-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span className="text-sm text-muted-foreground">Caricamento segmenti...</span>
+                  </div>
+                ) : segments.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-2">
                     {config.country ? 'Nessun segmento trovato' : 'Seleziona prima un paese'}
                   </p>
