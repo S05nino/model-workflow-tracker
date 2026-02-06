@@ -132,25 +132,51 @@ export const TestSuiteSection = () => {
       return;
     }
     
+    // Reset files when country changes
+    setFileOptions({
+      sample_files: [],
+      prod_models: [],
+      dev_models: [],
+      expert_rules_old: [],
+      expert_rules_new: [],
+      tagger_models: [],
+      company_lists: [],
+      date_folder: undefined,
+      segment_folder: undefined
+    });
+    
     const loadSegments = async () => {
       try {
         const response = await fetch(`${PYTHON_API_URL}/api/testsuite/segments/${config.country}`);
         if (!response.ok) {
-          console.error('Failed to load segments:', response.status);
+          console.error('Failed to load segments:', response.status, response.statusText);
           setSegments([]);
+          toast.error('Errore caricamento segmenti', {
+            description: `Impossibile caricare i segmenti per ${config.country}`
+          });
           return;
         }
         const data = await response.json();
         const loadedSegments = data.segments || [];
+        console.log('Loaded segments:', loadedSegments);
         setSegments(loadedSegments);
         
         // Reset segment if not available, or set first available
-        if (loadedSegments.length > 0 && !loadedSegments.includes(config.segment)) {
-          setConfig(prev => ({ ...prev, segment: loadedSegments[0] as Segment }));
+        if (loadedSegments.length > 0) {
+          if (!loadedSegments.includes(config.segment)) {
+            setConfig(prev => ({ ...prev, segment: loadedSegments[0] as Segment }));
+          }
+        } else {
+          toast.warning('Nessun segmento trovato', {
+            description: `Il paese ${config.country} non contiene cartelle Consumer/Business/Tagger`
+          });
         }
       } catch (err) {
         console.error('Failed to load segments:', err);
         setSegments([]);
+        toast.error('Errore di connessione', {
+          description: 'Impossibile connettersi al backend Python'
+        });
       }
     };
     loadSegments();
@@ -170,39 +196,62 @@ export const TestSuiteSection = () => {
       segment_folder: undefined
     };
     
-    if (!config.country || !config.segment) {
+    if (!config.country || !config.segment || segments.length === 0) {
       setFileOptions(emptyOptions);
       return;
     }
 
     const loadFiles = async () => {
       try {
+        console.log(`Loading files for ${config.country}/${config.segment}...`);
         const response = await fetch(`${PYTHON_API_URL}/api/testsuite/files/${config.country}/${config.segment}`);
+        
         if (!response.ok) {
-          console.error('Failed to load files:', response.status);
+          console.error('Failed to load files:', response.status, response.statusText);
           setFileOptions(emptyOptions);
+          toast.error('Errore caricamento file', {
+            description: `Impossibile caricare i file per ${config.country}/${config.segment}`
+          });
           return;
         }
+        
         const data = await response.json();
+        console.log('Loaded file data:', data);
+        
+        // Check for error in response
+        if (data.error) {
+          console.warn('Backend warning:', data.error);
+          toast.warning('Attenzione', { description: data.error });
+        }
+        
         // Ensure all arrays exist with defaults
-        setFileOptions({
-          sample_files: data.sample_files || [],
-          prod_models: data.prod_models || [],
-          dev_models: data.dev_models || [],
-          expert_rules_old: data.expert_rules_old || [],
-          expert_rules_new: data.expert_rules_new || [],
-          tagger_models: data.tagger_models || [],
-          company_lists: data.company_lists || [],
-          date_folder: data.date_folder,
-          segment_folder: data.segment_folder
-        });
+        const newOptions: FileOptions = {
+          sample_files: Array.isArray(data.sample_files) ? data.sample_files : [],
+          prod_models: Array.isArray(data.prod_models) ? data.prod_models : [],
+          dev_models: Array.isArray(data.dev_models) ? data.dev_models : [],
+          expert_rules_old: Array.isArray(data.expert_rules_old) ? data.expert_rules_old : [],
+          expert_rules_new: Array.isArray(data.expert_rules_new) ? data.expert_rules_new : [],
+          tagger_models: Array.isArray(data.tagger_models) ? data.tagger_models : [],
+          company_lists: Array.isArray(data.company_lists) ? data.company_lists : [],
+          date_folder: data.date_folder || undefined,
+          segment_folder: data.segment_folder || undefined
+        };
+        
+        setFileOptions(newOptions);
+        
+        if (newOptions.date_folder) {
+          console.log(`Working folder detected: ${newOptions.date_folder}`);
+        }
       } catch (err) {
         console.error('Failed to load files:', err);
         setFileOptions(emptyOptions);
+        toast.error('Errore di connessione', {
+          description: 'Impossibile connettersi al backend Python per caricare i file'
+        });
       }
     };
     loadFiles();
-  }, [config.country, config.segment]);
+  }, [config.country, config.segment, segments]);
 
   // Poll for test status
   useEffect(() => {

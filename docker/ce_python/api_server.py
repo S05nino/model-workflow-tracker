@@ -148,23 +148,23 @@ def find_latest_date_folder(segment_path: str) -> Optional[str]:
     """Find the most recent date folder in a segment path.
     
     Looks for folders that contain 'model' subfolder (the date folders).
-    Excludes 'sample' folder which contains input files.
+    Structure: country/segment/date_folder/model/
     """
     date_folders = []
-    for d in os.listdir(segment_path):
-        # Skip 'sample' folder - it's for input files, not a date folder
-        if d.lower() == 'sample':
-            continue
-        folder_path = os.path.join(segment_path, d)
-        if os.path.isdir(folder_path):
-            # Check if it looks like a date folder (contains model subfolder)
-            if os.path.exists(os.path.join(folder_path, "model")):
-                date_folders.append(d)
-    
-    if date_folders:
-        # Sort descending to get most recent
-        date_folders.sort(reverse=True)
-        return date_folders[0]
+    try:
+        for d in os.listdir(segment_path):
+            folder_path = os.path.join(segment_path, d)
+            if os.path.isdir(folder_path):
+                # Check if it looks like a date folder (contains model subfolder)
+                if os.path.exists(os.path.join(folder_path, "model")):
+                    date_folders.append(d)
+        
+        if date_folders:
+            # Sort descending to get most recent
+            date_folders.sort(reverse=True)
+            return date_folders[0]
+    except Exception as e:
+        print(f"Error finding date folder in {segment_path}: {e}")
     return None
 
 
@@ -172,28 +172,50 @@ def find_latest_date_folder(segment_path: str) -> Optional[str]:
 def list_files(country: str, segment: str):
     """List available files for a country/segment combination.
     
-    Structure expected:
-    country/segment/sample/           <- input files (.tsv.gz)
-    country/segment/date_folder/model/prod/      <- old models
-    country/segment/date_folder/model/develop/   <- new models
-    country/segment/date_folder/model/expertrules/old/  <- old rules
-    country/segment/date_folder/model/expertrules/new/  <- new rules
-    country/segment/date_folder/output/          <- output folder
+    NEW Structure (sample inside date folder):
+    country/segment/date_folder/sample/           <- input files (.tsv.gz)
+    country/segment/date_folder/model/prod/       <- old models
+    country/segment/date_folder/model/develop/    <- new models
+    country/segment/date_folder/model/expertrules/  <- expert rules
+    country/segment/date_folder/output/           <- output folder
     """
     country_path = os.path.join(DATA_ROOT, country)
     if not os.path.exists(country_path):
-        raise HTTPException(status_code=404, detail=f"Country not found: {country}")
+        # Return empty result instead of 404 to prevent frontend crash
+        print(f"Country path not found: {country_path}")
+        return {
+            "sample_files": [],
+            "prod_models": [],
+            "dev_models": [],
+            "expert_rules_old": [],
+            "expert_rules_new": [],
+            "tagger_models": [],
+            "company_lists": [],
+            "date_folder": None,
+            "segment_folder": None,
+            "error": f"Country folder not found: {country}"
+        }
     
     # Find actual segment folder (case-insensitive)
     actual_segment = find_segment_folder(country_path, segment)
     if not actual_segment:
-        raise HTTPException(status_code=404, detail=f"Segment not found: {segment}")
+        print(f"Segment not found: {segment} in {country_path}")
+        return {
+            "sample_files": [],
+            "prod_models": [],
+            "dev_models": [],
+            "expert_rules_old": [],
+            "expert_rules_new": [],
+            "tagger_models": [],
+            "company_lists": [],
+            "date_folder": None,
+            "segment_folder": None,
+            "error": f"Segment folder not found: {segment}"
+        }
     
     segment_path = os.path.join(country_path, actual_segment)
-    if not os.path.exists(segment_path):
-        raise HTTPException(status_code=404, detail=f"Segment path not found: {segment_path}")
     
-    # Find the latest date folder (for models)
+    # Find the latest date folder
     date_folder = find_latest_date_folder(segment_path)
     
     result = {
@@ -208,8 +230,15 @@ def list_files(country: str, segment: str):
         "segment_folder": actual_segment
     }
     
-    # Input files (.tsv.gz) - ALWAYS from 'sample' folder at segment level
-    sample_path = os.path.join(segment_path, "sample")
+    if not date_folder:
+        print(f"No date folder found in {segment_path}")
+        result["error"] = "No date folder found with 'model' subdirectory"
+        return result
+    
+    work_path = os.path.join(segment_path, date_folder)
+    
+    # Input files (.tsv.gz) - from 'sample' folder INSIDE the date folder
+    sample_path = os.path.join(work_path, "sample")
     if os.path.exists(sample_path):
         try:
             result["sample_files"] = sorted([
@@ -220,59 +249,64 @@ def list_files(country: str, segment: str):
                 f for f in os.listdir(sample_path)
                 if f.endswith(".xlsx") and "compan" in f.lower()
             ])
+            print(f"Found {len(result['sample_files'])} sample files in {sample_path}")
         except Exception as e:
-            print(f"Error reading sample folder: {e}")
+            print(f"Error reading sample folder {sample_path}: {e}")
+    else:
+        print(f"Sample folder not found: {sample_path}")
     
     # Model path - from date folder
-    if date_folder:
-        work_path = os.path.join(segment_path, date_folder)
-        model_path = os.path.join(work_path, "model")
+    model_path = os.path.join(work_path, "model")
+    
+    if segment.lower() in ["consumer", "business"]:
+        # Prod models (old)
+        prod_path = os.path.join(model_path, "prod")
+        if os.path.exists(prod_path):
+            try:
+                result["prod_models"] = sorted([f for f in os.listdir(prod_path) if f.endswith(".zip")])
+                print(f"Found {len(result['prod_models'])} prod models in {prod_path}")
+            except Exception as e:
+                print(f"Error reading prod folder {prod_path}: {e}")
         
-        if segment.lower() in ["consumer", "business"]:
-            # Prod models (old)
-            prod_path = os.path.join(model_path, "prod")
-            if os.path.exists(prod_path):
-                try:
-                    result["prod_models"] = sorted([f for f in os.listdir(prod_path) if f.endswith(".zip")])
-                except Exception as e:
-                    print(f"Error reading prod folder: {e}")
-            
-            # Dev models (new)
-            dev_path = os.path.join(model_path, "develop")
-            if os.path.exists(dev_path):
-                try:
-                    result["dev_models"] = sorted([f for f in os.listdir(dev_path) if f.endswith(".zip")])
-                except Exception as e:
-                    print(f"Error reading develop folder: {e}")
-            
-            # Expert rules
-            expert_path = os.path.join(model_path, "expertrules")
-            if os.path.exists(expert_path):
-                try:
-                    # Check for old/new subfolders
-                    old_path = os.path.join(expert_path, "old")
-                    new_path = os.path.join(expert_path, "new")
-                    
-                    if os.path.exists(old_path):
-                        result["expert_rules_old"] = sorted([f for f in os.listdir(old_path) if f.endswith(".zip")])
-                    if os.path.exists(new_path):
-                        result["expert_rules_new"] = sorted([f for f in os.listdir(new_path) if f.endswith(".zip")])
-                    
-                    # If no old/new folders, list files directly from expertrules
-                    if not result["expert_rules_old"] and not result["expert_rules_new"]:
-                        all_rules = sorted([f for f in os.listdir(expert_path) if f.endswith(".zip")])
-                        result["expert_rules_old"] = all_rules
-                        result["expert_rules_new"] = all_rules
-                except Exception as e:
-                    print(f"Error reading expertrules folder: {e}")
+        # Dev models (new)
+        dev_path = os.path.join(model_path, "develop")
+        if os.path.exists(dev_path):
+            try:
+                result["dev_models"] = sorted([f for f in os.listdir(dev_path) if f.endswith(".zip")])
+                print(f"Found {len(result['dev_models'])} dev models in {dev_path}")
+            except Exception as e:
+                print(f"Error reading develop folder {dev_path}: {e}")
         
-        elif segment.lower() == "tagger":
-            # Tagger models are directly in model folder
-            if os.path.exists(model_path):
-                try:
-                    result["tagger_models"] = sorted([f for f in os.listdir(model_path) if f.endswith(".zip")])
-                except Exception as e:
-                    print(f"Error reading tagger models: {e}")
+        # Expert rules
+        expert_path = os.path.join(model_path, "expertrules")
+        if os.path.exists(expert_path):
+            try:
+                # Check for old/new subfolders
+                old_path = os.path.join(expert_path, "old")
+                new_path = os.path.join(expert_path, "new")
+                
+                if os.path.exists(old_path):
+                    result["expert_rules_old"] = sorted([f for f in os.listdir(old_path) if f.endswith(".zip")])
+                if os.path.exists(new_path):
+                    result["expert_rules_new"] = sorted([f for f in os.listdir(new_path) if f.endswith(".zip")])
+                
+                # If no old/new folders, list files directly from expertrules
+                if not result["expert_rules_old"] and not result["expert_rules_new"]:
+                    all_rules = sorted([f for f in os.listdir(expert_path) if f.endswith(".zip")])
+                    result["expert_rules_old"] = all_rules
+                    result["expert_rules_new"] = all_rules
+                    
+                print(f"Found {len(result['expert_rules_old'])} old rules, {len(result['expert_rules_new'])} new rules")
+            except Exception as e:
+                print(f"Error reading expertrules folder {expert_path}: {e}")
+    
+    elif segment.lower() == "tagger":
+        # Tagger models are directly in model folder
+        if os.path.exists(model_path):
+            try:
+                result["tagger_models"] = sorted([f for f in os.listdir(model_path) if f.endswith(".zip")])
+            except Exception as e:
+                print(f"Error reading tagger models: {e}")
     
     return result
 
