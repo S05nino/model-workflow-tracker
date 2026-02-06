@@ -18,13 +18,13 @@ const PYTHON_API_URL = import.meta.env.VITE_PYTHON_API_URL || "http://localhost:
 type Segment = "Consumer" | "Business" | "Tagger";
 
 interface TestConfig {
-  country: string;
+  country: string | null;
   segment: Segment;
-  version: string;
-  oldModel: string;
-  newModel: string;
-  oldExpertRules: string;
-  newExpertRules: string;
+  version: string | null;
+  oldModel: string | null;
+  newModel: string | null;
+  oldExpertRules: string | null;
+  newExpertRules: string | null;
   accuracyFiles: string[];
   anomaliesFiles: string[];
   precisionFiles: string[];
@@ -32,8 +32,8 @@ interface TestConfig {
   vmBench: number;
   vmDev: number;
   // Tagger specific
-  companyList: string;
-  distributionData: string;
+  companyList: string | null;
+  distributionData: string | null;
 }
 
 interface FileOptions {
@@ -375,7 +375,7 @@ export const TestSuiteSection = () => {
     return () => clearInterval(interval);
   }, [currentRun]);
 
-  const updateConfig = (key: keyof TestConfig, value: string | number | string[]) => {
+  const updateConfig = <K extends keyof TestConfig>(key: K, value: TestConfig[K]) => {
     setConfig((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -703,7 +703,7 @@ export const TestSuiteSection = () => {
                   <Label className="text-sm text-muted-foreground">
                     {config.segment === "Tagger" ? "Old Model" : "Old Model (prod)"}
                   </Label>
-                  <Select value={config.oldModel} onValueChange={(v) => updateConfig("oldModel", v)}>
+                  <Select value={config.oldModel ?? ""} onValueChange={(v) => updateConfig("oldModel", v || null)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Seleziona modello" />
                     </SelectTrigger>
@@ -720,7 +720,7 @@ export const TestSuiteSection = () => {
                   <Label className="text-sm text-muted-foreground">
                     {config.segment === "Tagger" ? "New Model" : "New Model (develop)"}
                   </Label>
-                  <Select value={config.newModel} onValueChange={(v) => updateConfig("newModel", v)}>
+                  <Select value={config.newModel ?? ""} onValueChange={(v) => updateConfig("newModel", v || null)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Seleziona modello" />
                     </SelectTrigger>
@@ -745,12 +745,15 @@ export const TestSuiteSection = () => {
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
                       <Label className="text-sm text-muted-foreground">Old Expert Rules</Label>
-                      <Select value={config.oldExpertRules} onValueChange={(v) => updateConfig("oldExpertRules", v)}>
+                      <Select
+                        value={config.oldExpertRules ?? "__none__"}
+                        onValueChange={(v) => updateConfig("oldExpertRules", v === "__none__" ? null : v)}
+                      >
                         <SelectTrigger>
                           <SelectValue placeholder="Nessuna" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">Nessuna</SelectItem>
+                          <SelectItem value="__none__">Nessuna</SelectItem>
                           {fileOptions.expert_rules_old.map((r) => (
                             <SelectItem key={r} value={r}>
                               {r}
@@ -761,12 +764,15 @@ export const TestSuiteSection = () => {
                     </div>
                     <div className="space-y-2">
                       <Label className="text-sm text-muted-foreground">New Expert Rules</Label>
-                      <Select value={config.newExpertRules} onValueChange={(v) => updateConfig("newExpertRules", v)}>
+                      <Select
+                        value={config.newExpertRules ?? "__none__"}
+                        onValueChange={(v) => updateConfig("newExpertRules", v === "__none__" ? null : v)}
+                      >
                         <SelectTrigger>
                           <SelectValue placeholder="Nessuna" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">Nessuna</SelectItem>
+                          <SelectItem value="__none__">Nessuna</SelectItem>
                           {fileOptions.expert_rules_new.map((r) => (
                             <SelectItem key={r} value={r}>
                               {r}
