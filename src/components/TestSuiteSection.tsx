@@ -422,8 +422,6 @@ export const TestSuiteSection = () => {
               vm_dev: config.vmDev,
               company_list: config.companyList,
               distribution_data: config.distributionData,
-              segment_folder: fileOptions.segment_folder,
-              date_folder: fileOptions.date_folder,
             }
           : {
               country: config.country,
@@ -439,8 +437,6 @@ export const TestSuiteSection = () => {
               stability_files: config.stabilityFiles,
               vm_bench: config.vmBench,
               vm_dev: config.vmDev,
-              segment_folder: fileOptions.segment_folder,
-              date_folder: fileOptions.date_folder,
             };
 
       const response = await fetch(endpoint, {
