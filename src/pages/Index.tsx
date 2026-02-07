@@ -1,13 +1,8 @@
-import { useState } from 'react';
-import { useProjectsAdapter as useProjects, useReleasesAdapter as useReleases, useCountriesAdapter as useCountries } from '@/hooks/adapters';
-import { ProjectCard } from '@/components/ProjectCard';
-import { NewProjectDialog } from '@/components/NewProjectDialog';
+import { useReleasesAdapter as useReleases, useCountriesAdapter as useCountries } from '@/hooks/adapters';
 import { DashboardStats } from '@/components/DashboardStats';
-import { FilterBar } from '@/components/FilterBar';
 import { ReleasesSection } from '@/components/ReleasesSection';
 import { TestSuiteSection } from '@/components/TestSuiteSection';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { ProjectStatus, Segment, TestType } from '@/types/project';
 import { Brain, Workflow, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -15,58 +10,24 @@ import { Button } from '@/components/ui/button';
 import { exportDashboardReport } from '@/lib/exportReport';
 
 const Index = () => {
-  const {
-    projects,
-    addProject,
-    updateProjectStep,
-    startNewRound,
-    confirmProject,
-    updateProjectStatus,
-    deleteProject,
-  } = useProjects();
-
   const { releases } = useReleases();
   const { countries } = useCountries();
 
-  const [statusFilter, setStatusFilter] = useState<ProjectStatus | 'all'>('all');
-  const [countryFilter, setCountryFilter] = useState<string | 'all'>('all');
-
-  const activeProjects = projects.filter(p => p.status !== 'completed');
-  const completedProjects = projects.filter(p => p.status === 'completed');
-
-  const filteredActiveProjects = activeProjects.filter((project) => {
-    if (statusFilter !== 'all' && project.status !== statusFilter) return false;
-    if (countryFilter !== 'all' && project.country !== countryFilter) return false;
-    return true;
-  });
-
-  const filteredCompletedProjects = completedProjects.filter((project) => {
-    if (statusFilter !== 'all' && statusFilter !== 'completed') return false;
-    if (countryFilter !== 'all' && project.country !== countryFilter) return false;
-    return true;
-  });
-
-  const handleAddProject = (country: string, segment: Segment, testType: TestType) => {
-    addProject(country, segment, testType);
-    const countryName = countries.find(c => c.code === country)?.name || country;
-    toast.success('Progetto creato', {
-      description: `${countryName} aggiunto con successo`,
-    });
-  };
-
-  const handleConfirmProject = (projectId: string, country: string) => {
-    confirmProject(projectId);
-    toast.success('Modello confermato!', {
-      description: `Il modello per ${country} è stato approvato`,
-    });
-  };
-
-  const handleDeleteProject = (projectId: string, country: string) => {
-    deleteProject(projectId);
-    toast.info('Progetto eliminato', {
-      description: `${country} rimosso dalla lista`,
-    });
-  };
+  // Convert releases to projects format for stats and export
+  const projects = releases.flatMap(r => 
+    r.models.map(m => ({
+      id: m.id,
+      country: m.country,
+      segment: m.segment,
+      status: m.status,
+      currentRound: m.currentRound,
+      rounds: m.rounds,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+      confirmedAt: m.confirmedAt,
+      awaitingConfirmation: m.status === 'waiting',
+    }))
+  );
 
   return (
     <div className="min-h-screen bg-background">
@@ -88,114 +49,32 @@ const Index = () => {
                 </p>
               </div>
             </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
+            <Button
+              variant="outline"
               onClick={async () => {
-                const fileName = await exportDashboardReport(projects, releases, countries);
-                  toast.success('Report esportato', {
-                    description: `File ${fileName} scaricato`,
-                  });
-                }}
-              >
-                <Download className="w-4 h-4 mr-2" />
-                Esporta Report
-              </Button>
-              <NewProjectDialog onAdd={handleAddProject} countries={countries} />
-            </div>
+                const fileName = await exportDashboardReport(projects as any, releases, countries);
+                toast.success('Report esportato', {
+                  description: `File ${fileName} scaricato`,
+                });
+              }}
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Esporta Report
+            </Button>
           </div>
         </header>
 
         {/* Stats */}
         <section className="mb-8 animate-fade-in" style={{ animationDelay: '0.1s' }}>
-          <DashboardStats projects={projects} />
+          <DashboardStats projects={projects as any} />
         </section>
 
-        {/* Tabs for Projects and Releases */}
-        <Tabs defaultValue="projects" className="animate-fade-in" style={{ animationDelay: '0.2s' }}>
+        {/* Tabs for Releases and TestSuite */}
+        <Tabs defaultValue="releases" className="animate-fade-in" style={{ animationDelay: '0.2s' }}>
           <TabsList className="mb-6">
-            <TabsTrigger value="projects">Progetti</TabsTrigger>
             <TabsTrigger value="releases">Rilasci</TabsTrigger>
             <TabsTrigger value="testsuite">TestSuite</TabsTrigger>
           </TabsList>
-
-          <TabsContent value="projects" className="space-y-6">
-            {/* Filters */}
-            <FilterBar
-              statusFilter={statusFilter}
-              countryFilter={countryFilter}
-              countries={countries}
-              onStatusChange={setStatusFilter}
-              onCountryChange={setCountryFilter}
-              onClearFilters={() => {
-                setStatusFilter('all');
-                setCountryFilter('all');
-              }}
-            />
-
-            {/* Projects Grid */}
-            {filteredActiveProjects.length === 0 && filteredCompletedProjects.length === 0 ? (
-              <div className="text-center py-16 glass-card rounded-xl">
-                <Brain className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
-                <h3 className="text-xl font-semibold text-foreground mb-2">
-                  {projects.length === 0 ? 'Nessun progetto' : 'Nessun risultato'}
-                </h3>
-                <p className="text-muted-foreground">
-                  {projects.length === 0
-                    ? 'Crea il tuo primo progetto per iniziare a tracciare i workflow'
-                    : 'Prova a modificare i filtri di ricerca'}
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-8">
-                {/* Active Projects */}
-                {filteredActiveProjects.length > 0 && (
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-                      In Corso ({filteredActiveProjects.length})
-                    </h3>
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                      {filteredActiveProjects.map((project) => (
-                        <ProjectCard
-                          key={project.id}
-                          project={project}
-                          countries={countries}
-                          onUpdateStep={(step) => updateProjectStep(project.id, step)}
-                          onStartNewRound={(testType) => startNewRound(project.id, testType)}
-                          onConfirm={() => handleConfirmProject(project.id, project.country)}
-                          onUpdateStatus={(status) => updateProjectStatus(project.id, status)}
-                          onDelete={() => handleDeleteProject(project.id, project.country)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Completed Projects */}
-                {filteredCompletedProjects.length > 0 && (
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-                      Completati ({filteredCompletedProjects.length})
-                    </h3>
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                      {filteredCompletedProjects.map((project) => (
-                        <ProjectCard
-                          key={project.id}
-                          project={project}
-                          countries={countries}
-                          onUpdateStep={(step) => updateProjectStep(project.id, step)}
-                          onStartNewRound={(testType) => startNewRound(project.id, testType)}
-                          onConfirm={() => handleConfirmProject(project.id, project.country)}
-                          onUpdateStatus={(status) => updateProjectStatus(project.id, status)}
-                          onDelete={() => handleDeleteProject(project.id, project.country)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </TabsContent>
 
           <TabsContent value="releases">
             <ReleasesSection />
