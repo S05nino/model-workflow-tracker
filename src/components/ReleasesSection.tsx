@@ -2,8 +2,8 @@ import { useReleasesAdapter as useReleases, useCountriesAdapter as useCountries 
 import { ReleaseCard } from './ReleaseCard';
 import { NewReleaseDialog } from './NewReleaseDialog';
 import { ManageCountriesDialog } from './ManageCountriesDialog';
-import { Segment } from '@/types/project';
-import { ReleaseModelIds } from '@/types/release';
+import { Segment, TestType, WorkflowStep } from '@/types/project';
+import { ReleaseModel, ReleaseModelIds } from '@/types/release';
 import { Package } from 'lucide-react';
 import { parseISO, compareAsc } from 'date-fns';
 
@@ -17,6 +17,9 @@ export function ReleasesSection() {
     deleteRelease,
     completeRelease,
     updateReleaseDate,
+    updateModelStep,
+    startNewRound,
+    updateModelStatus,
   } = useReleases();
 
   const { countries, addCountry, removeCountry } = useCountries();
@@ -43,6 +46,18 @@ export function ReleasesSection() {
 
   const handleCompleteRelease = (releaseId: string) => {
     completeRelease(releaseId);
+  };
+
+  const handleUpdateModelStep = (releaseId: string, modelId: string, step: WorkflowStep) => {
+    updateModelStep(releaseId, modelId, step);
+  };
+
+  const handleStartNewRound = (releaseId: string, modelId: string, testType: TestType) => {
+    startNewRound(releaseId, modelId, testType);
+  };
+
+  const handleUpdateModelStatus = (releaseId: string, modelId: string, status: ReleaseModel['status']) => {
+    updateModelStatus(releaseId, modelId, status);
   };
 
   const handleAddCountry = (country: { code: string; name: string; segments: Segment[] }) => {
@@ -114,6 +129,9 @@ export function ReleasesSection() {
                     onUpdateDate={(newDate) => handleUpdateDate(release.id, newDate)}
                     onDelete={() => handleDeleteRelease(release.id)}
                     onComplete={() => handleCompleteRelease(release.id)}
+                    onUpdateModelStep={(modelId, step) => handleUpdateModelStep(release.id, modelId, step)}
+                    onStartNewRound={(modelId, testType) => handleStartNewRound(release.id, modelId, testType)}
+                    onUpdateModelStatus={(modelId, status) => handleUpdateModelStatus(release.id, modelId, status)}
                   />
                 ))}
               </div>
@@ -137,6 +155,9 @@ export function ReleasesSection() {
                     onUpdateDate={(newDate) => handleUpdateDate(release.id, newDate)}
                     onDelete={() => handleDeleteRelease(release.id)}
                     onComplete={() => handleCompleteRelease(release.id)}
+                    onUpdateModelStep={(modelId, step) => handleUpdateModelStep(release.id, modelId, step)}
+                    onStartNewRound={(modelId, testType) => handleStartNewRound(release.id, modelId, testType)}
+                    onUpdateModelStatus={(modelId, status) => handleUpdateModelStatus(release.id, modelId, status)}
                   />
                 ))}
               </div>

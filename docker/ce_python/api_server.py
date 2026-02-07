@@ -56,6 +56,7 @@ class TestConfigBase(BaseModel):
     vm_bench: int = 1
     vm_dev: int = 2
     azure_batch: bool = True
+    date_folder: Optional[str] = None  # Date folder containing model/sample/output
 
 
 class ConsumerBusinessConfig(TestConfigBase):
@@ -322,15 +323,28 @@ def run_consumer_business_tests(run_id: str, config: ConsumerBusinessConfig):
         
         today = datetime.date.today().strftime("%y%m%d")
         segment_path = os.path.join(DATA_ROOT, config.country, config.segment)
-        output_folder = os.path.join(segment_path, f"{config.version}_{today}")
+        
+        # Use date_folder if provided, otherwise create a new one
+        if config.date_folder:
+            work_path = os.path.join(segment_path, config.date_folder)
+        else:
+            # Fallback: find latest date folder
+            work_path = segment_path
+            date_folder = find_latest_date_folder(segment_path)
+            if date_folder:
+                work_path = os.path.join(segment_path, date_folder)
+        
+        # Output folder is inside the work path
+        output_folder = os.path.join(work_path, "output")
         os.makedirs(output_folder, exist_ok=True)
         
-        # Model paths
-        old_model_path = os.path.join(segment_path, "model", "prod", config.old_model)
-        new_model_path = os.path.join(segment_path, "model", "develop", config.new_model)
+        # Model paths - inside date_folder/model/
+        model_path = os.path.join(work_path, "model")
+        old_model_path = os.path.join(model_path, "prod", config.old_model)
+        new_model_path = os.path.join(model_path, "develop", config.new_model)
         
         # Expert rules paths
-        expert_path = os.path.join(segment_path, "model", "expertrules")
+        expert_path = os.path.join(model_path, "expertrules")
         old_expert = None
         new_expert = None
         
@@ -350,6 +364,9 @@ def run_consumer_business_tests(run_id: str, config: ConsumerBusinessConfig):
                 new_expert = os.path.join(expert_path, config.new_expert_rules)
         
         test_runs[run_id]["message"] = "Creating TestRunner instance..."
+        print(f"Old model path: {old_model_path}")
+        print(f"New model path: {new_model_path}")
+        print(f"Output folder: {output_folder}")
         
         runner = TestRunner(
             old_model_path,
@@ -368,7 +385,8 @@ def run_consumer_business_tests(run_id: str, config: ConsumerBusinessConfig):
             save=True
         )
         
-        sample_path = os.path.join(segment_path, "sample")
+        # Sample path - inside date_folder/sample/
+        sample_path = os.path.join(work_path, "sample")
         total_tests = len(config.accuracy_files) + len(config.anomalies_files) + \
                      len(config.precision_files) + len(config.stability_files)
         current_test = 0
@@ -480,16 +498,25 @@ def run_tagger_tests(run_id: str, config: TaggerConfig):
         
         from suite_tests.testRunner_tagger import TestRunner as TestRunnerTagger
         
-        today = datetime.date.today().strftime("%y%m%d")
         segment_path = os.path.join(DATA_ROOT, config.country, "Tagger")
-        output_folder = os.path.join(segment_path, f"{config.version}_{today}")
+        
+        # Use date_folder if provided
+        if config.date_folder:
+            work_path = os.path.join(segment_path, config.date_folder)
+        else:
+            work_path = segment_path
+            date_folder = find_latest_date_folder(segment_path)
+            if date_folder:
+                work_path = os.path.join(segment_path, date_folder)
+        
+        output_folder = os.path.join(work_path, "output")
         os.makedirs(output_folder, exist_ok=True)
         
-        model_path = os.path.join(segment_path, "model")
+        model_path = os.path.join(work_path, "model")
         old_model_path = os.path.join(model_path, config.old_model)
         new_model_path = os.path.join(model_path, config.new_model)
         
-        sample_path = os.path.join(segment_path, "sample")
+        sample_path = os.path.join(work_path, "sample")
         company_list_path = os.path.join(sample_path, config.company_list)
         distribution_path = os.path.join(sample_path, config.distribution_data)
         
