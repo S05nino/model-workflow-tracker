@@ -93,12 +93,12 @@ export function ReleaseCard({
 
   const isRoundCompleted = (model: ReleaseModel) => {
     const currentRound = getCurrentRoundData(model);
-    return currentRound?.currentStep === 5;
+    return currentRound?.currentStep === 3;
   };
 
   const handleAdvanceStep = (model: ReleaseModel) => {
     const currentRound = getCurrentRoundData(model);
-    if (currentRound && currentRound.currentStep < 5) {
+    if (currentRound && currentRound.currentStep < 3) {
       onUpdateModelStep(model.id, (currentRound.currentStep + 1) as WorkflowStep);
     }
   };
@@ -183,108 +183,145 @@ export function ReleaseCard({
                   const isModelCompleted = model.confirmed;
                   
                   return (
-                    <div
-                      key={model.id}
-                      className={cn(
-                        "p-4 rounded-lg border space-y-3",
-                        !model.included && "opacity-50 bg-muted/30",
-                        model.confirmed && "bg-success/10 border-success/30"
-                      )}
-                    >
-                      {/* Header row */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          {model.confirmed ? (
-                            <CheckCircle2 className="w-5 h-5 text-success" />
-                          ) : model.included ? (
-                            <div className="w-5 h-5 rounded-full border-2 border-muted-foreground/30" />
-                          ) : (
-                            <XCircle className="w-5 h-5 text-muted-foreground" />
+                    <Collapsible key={model.id}>
+                      <div
+                        className={cn(
+                          "p-4 rounded-lg border space-y-3",
+                          !model.included && "opacity-50 bg-muted/30",
+                          model.confirmed && "bg-success/10 border-success/30"
+                        )}
+                      >
+                        {/* Header row - Collapsible Trigger */}
+                        <CollapsibleTrigger className="flex items-center justify-between w-full">
+                          <div className="flex items-center gap-3">
+                            {model.confirmed ? (
+                              <CheckCircle2 className="w-5 h-5 text-success" />
+                            ) : model.included ? (
+                              <ChevronRight className="w-5 h-5 text-muted-foreground transition-transform [[data-state=open]_&]:rotate-90" />
+                            ) : (
+                              <XCircle className="w-5 h-5 text-muted-foreground" />
+                            )}
+                            
+                            <div className="text-left">
+                              <p className="font-medium text-foreground">
+                                {countryName} <span className="text-muted-foreground font-normal">({model.country})</span>
+                              </p>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-sm text-muted-foreground">
+                                  {SEGMENT_LABELS[model.segment]}
+                                </span>
+                                {currentRound && !isModelCompleted && (
+                                  <>
+                                    <Badge variant="outline" className="text-xs">
+                                      Round {model.currentRound}
+                                    </Badge>
+                                    <Badge variant={currentRound.testType === 'test-suite' ? 'warning' : 'info'} className="text-xs">
+                                      {TEST_TYPE_LABELS[currentRound.testType]}
+                                    </Badge>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Status dropdown for active models */}
+                          {!release.completed && model.included && !model.confirmed && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <MoreVertical className="w-4 h-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                {model.status === 'in-progress' && (
+                                  <DropdownMenuItem onClick={() => onUpdateModelStatus(model.id, 'on-hold')}>
+                                    <Pause className="w-4 h-4 mr-2" />
+                                    Metti in pausa
+                                  </DropdownMenuItem>
+                                )}
+                                {model.status === 'on-hold' && (
+                                  <DropdownMenuItem onClick={() => onUpdateModelStatus(model.id, 'in-progress')}>
+                                    <Play className="w-4 h-4 mr-2" />
+                                    Riprendi
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => onToggleInclusion(model.id)}>
+                                  <XCircle className="w-4 h-4 mr-2" />
+                                  {model.included ? 'Escludi' : 'Includi'}
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           )}
-                          
-                          <div>
-                            <p className="font-medium text-foreground">
-                              {countryName} <span className="text-muted-foreground font-normal">({model.country})</span>
-                            </p>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-sm text-muted-foreground">
-                                {SEGMENT_LABELS[model.segment]}
-                              </span>
-                              {currentRound && !isModelCompleted && (
+                        </CollapsibleTrigger>
+
+                        <CollapsibleContent>
+                          {/* Workflow progress */}
+                          {model.included && !model.confirmed && currentRound && (
+                            <div className="py-2 pt-4">
+                              <WorkflowProgress 
+                                currentStep={currentRound.currentStep}
+                                isCompleted={roundCompleted}
+                                onStepClick={(step) => onUpdateModelStep(model.id, step)}
+                                interactive={model.status === 'in-progress'}
+                              />
+                            </div>
+                          )}
+
+                          {/* Action buttons */}
+                          {!release.completed && model.included && !model.confirmed && model.status === 'in-progress' && (
+                            <div className="flex gap-2 pt-2">
+                              {!roundCompleted ? (
+                                <Button 
+                                  onClick={() => handleAdvanceStep(model)}
+                                  className="flex-1 gap-2"
+                                  size="sm"
+                                >
+                                  Prossimo Step
+                                  <ChevronRight className="w-4 h-4" />
+                                </Button>
+                              ) : (
                                 <>
-                                  <Badge variant="outline" className="text-xs">
-                                    Round {model.currentRound}
-                                  </Badge>
-                                  <Badge variant={currentRound.testType === 'test-suite' ? 'warning' : 'info'} className="text-xs">
-                                    {TEST_TYPE_LABELS[currentRound.testType]}
-                                  </Badge>
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="outline" size="sm" className="flex-1 gap-2">
+                                        <Plus className="w-4 h-4" />
+                                        Nuovo Round
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent>
+                                      {availableTestTypes.map((tt) => (
+                                        <DropdownMenuItem key={tt} onClick={() => onStartNewRound(model.id, tt)}>
+                                          {TEST_TYPE_LABELS[tt]}
+                                        </DropdownMenuItem>
+                                      ))}
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                  <Button 
+                                    onClick={() => setConfirmingModel({
+                                      id: model.id,
+                                      country: countryName,
+                                      segment: SEGMENT_LABELS[model.segment],
+                                    })}
+                                    variant="default"
+                                    size="sm"
+                                    className="flex-1 gap-2 bg-success hover:bg-success/90"
+                                  >
+                                    <CheckCircle2 className="w-4 h-4" />
+                                    Conferma Modello
+                                  </Button>
                                 </>
                               )}
                             </div>
-                          </div>
-                        </div>
+                          )}
 
-                        {/* Status dropdown for active models */}
-                        {!release.completed && model.included && !model.confirmed && (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
-                                <MoreVertical className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              {model.status === 'in-progress' && (
-                                <DropdownMenuItem onClick={() => onUpdateModelStatus(model.id, 'on-hold')}>
-                                  <Pause className="w-4 h-4 mr-2" />
-                                  Metti in pausa
-                                </DropdownMenuItem>
-                              )}
-                              {model.status === 'on-hold' && (
-                                <DropdownMenuItem onClick={() => onUpdateModelStatus(model.id, 'in-progress')}>
-                                  <Play className="w-4 h-4 mr-2" />
-                                  Riprendi
-                                </DropdownMenuItem>
-                              )}
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem onClick={() => onToggleInclusion(model.id)}>
-                                <XCircle className="w-4 h-4 mr-2" />
-                                {model.included ? 'Escludi' : 'Includi'}
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        )}
-                      </div>
-
-                      {/* Workflow progress */}
-                      {model.included && !model.confirmed && currentRound && (
-                        <div className="py-2">
-                          <WorkflowProgress 
-                            currentStep={currentRound.currentStep}
-                            isCompleted={roundCompleted}
-                            onStepClick={(step) => onUpdateModelStep(model.id, step)}
-                            interactive={model.status === 'in-progress'}
-                          />
-                        </div>
-                      )}
-
-                      {/* Action buttons */}
-                      {!release.completed && model.included && !model.confirmed && model.status === 'in-progress' && (
-                        <div className="flex gap-2 pt-2">
-                          {!roundCompleted ? (
-                            <Button 
-                              onClick={() => handleAdvanceStep(model)}
-                              className="flex-1 gap-2"
-                              size="sm"
-                            >
-                              Prossimo Step
-                              <ChevronRight className="w-4 h-4" />
-                            </Button>
-                          ) : (
-                            <>
+                          {/* Waiting confirmation state */}
+                          {!release.completed && model.included && !model.confirmed && model.status === 'waiting' && roundCompleted && (
+                            <div className="flex gap-2 pt-2">
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <Button variant="outline" size="sm" className="flex-1 gap-2">
-                                    <Plus className="w-4 h-4" />
+                                    <RefreshCw className="w-4 h-4" />
                                     Nuovo Round
                                   </Button>
                                 </DropdownMenuTrigger>
@@ -309,63 +346,29 @@ export function ReleaseCard({
                                 <CheckCircle2 className="w-4 h-4" />
                                 Conferma Modello
                               </Button>
-                            </>
+                            </div>
                           )}
-                        </div>
-                      )}
 
-                      {/* Waiting confirmation state */}
-                      {!release.completed && model.included && !model.confirmed && model.status === 'waiting' && roundCompleted && (
-                        <div className="flex gap-2 pt-2">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="outline" size="sm" className="flex-1 gap-2">
-                                <RefreshCw className="w-4 h-4" />
-                                Nuovo Round
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent>
-                              {availableTestTypes.map((tt) => (
-                                <DropdownMenuItem key={tt} onClick={() => onStartNewRound(model.id, tt)}>
-                                  {TEST_TYPE_LABELS[tt]}
-                                </DropdownMenuItem>
-                              ))}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                          <Button 
-                            onClick={() => setConfirmingModel({
-                              id: model.id,
-                              country: countryName,
-                              segment: SEGMENT_LABELS[model.segment],
-                            })}
-                            variant="default"
-                            size="sm"
-                            className="flex-1 gap-2 bg-success hover:bg-success/90"
-                          >
-                            <CheckCircle2 className="w-4 h-4" />
-                            Conferma Modello
-                          </Button>
-                        </div>
-                      )}
+                          {/* On hold state */}
+                          {model.status === 'on-hold' && !model.confirmed && (
+                            <div className="flex items-center justify-center gap-2 py-2 text-muted-foreground">
+                              <Pause className="w-4 h-4" />
+                              <span className="text-sm">In pausa</span>
+                            </div>
+                          )}
 
-                      {/* On hold state */}
-                      {model.status === 'on-hold' && !model.confirmed && (
-                        <div className="flex items-center justify-center gap-2 py-2 text-muted-foreground">
-                          <Pause className="w-4 h-4" />
-                          <span className="text-sm">In pausa</span>
-                        </div>
-                      )}
-
-                      {/* Confirmed model info */}
-                      {model.confirmed && model.modelIds && (
-                        <div className="text-xs text-muted-foreground space-y-0.5 pt-2 border-t">
-                          {model.modelIds.modelOut && <span className="block">Model Out: {model.modelIds.modelOut}</span>}
-                          {model.modelIds.modelIn && <span className="block">Model In: {model.modelIds.modelIn}</span>}
-                          {model.modelIds.rulesOut && <span className="block">Rules Out: {model.modelIds.rulesOut}</span>}
-                          {model.modelIds.rulesIn && <span className="block">Rules In: {model.modelIds.rulesIn}</span>}
-                        </div>
-                      )}
-                    </div>
+                          {/* Confirmed model info */}
+                          {model.confirmed && model.modelIds && (
+                            <div className="text-xs text-muted-foreground space-y-0.5 pt-2 border-t">
+                              {model.modelIds.modelOut && <span className="block">Model Out: {model.modelIds.modelOut}</span>}
+                              {model.modelIds.modelIn && <span className="block">Model In: {model.modelIds.modelIn}</span>}
+                              {model.modelIds.rulesOut && <span className="block">Rules Out: {model.modelIds.rulesOut}</span>}
+                              {model.modelIds.rulesIn && <span className="block">Rules In: {model.modelIds.rulesIn}</span>}
+                            </div>
+                          )}
+                        </CollapsibleContent>
+                      </div>
+                    </Collapsible>
                   );
                 })}
               </div>
