@@ -137,20 +137,20 @@ export function useReleasesLocal() {
       models: release.models.map((m) => {
         if (m.id !== modelId) return m;
 
-        const currentRoundIndex = m.rounds.findIndex((r) => r.roundNumber === m.currentRound);
+      const currentRoundIndex = m.rounds.findIndex((r) => r.roundNumber === m.currentRound);
         if (currentRoundIndex === -1) return m;
 
         const updatedRounds = [...m.rounds];
         updatedRounds[currentRoundIndex] = {
           ...updatedRounds[currentRoundIndex],
           currentStep: step,
-          ...(step === 5 ? { completedAt: new Date().toISOString() } : {}),
+          ...(step === 3 ? { completedAt: new Date().toISOString() } : {}),
         };
 
         return {
           ...m,
           rounds: updatedRounds,
-          status: step === 5 ? ('waiting' as const) : ('in-progress' as const),
+          status: step === 3 ? ('waiting' as const) : ('in-progress' as const),
         };
       }),
       updatedAt: new Date().toISOString(),

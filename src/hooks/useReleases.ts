@@ -119,13 +119,13 @@ export function useReleases() {
           updatedRounds[currentRoundIndex] = {
             ...updatedRounds[currentRoundIndex],
             currentStep: step,
-            ...(step === 5 ? { completedAt: new Date().toISOString() } : {}),
+            ...(step === 3 ? { completedAt: new Date().toISOString() } : {}),
           };
 
           return {
             ...m,
             rounds: updatedRounds,
-            status: step === 5 ? ('waiting' as const) : ('in-progress' as const),
+            status: step === 3 ? ('waiting' as const) : ('in-progress' as const),
           };
         }),
         updatedAt: new Date().toISOString(),
