@@ -14,7 +14,6 @@ import datetime
 import traceback
 import glob
 import shutil
-import s3_helper
 
 # Add the CategorizationEnginePython paths
 CE_PYTHON_PATH = "/app/CategorizationEnginePython"
@@ -52,8 +51,6 @@ _real_os_remove = os.remove
 _PATH_REMAPS = [
     ("C:/_git/CategorizationEnginePython", "/app/CategorizationEnginePython"),
     ("C:\\_git\\CategorizationEnginePython", "/app/CategorizationEnginePython"),
-    ("C:/Users/kq5simmarine/OneDrive - CRIF SpA/CE/model-workflow-tracker/docker/ce_python/CategorizationEnginePython", "/app/CategorizationEnginePython"),
-    ("C:\\Users\\kq5simmarine\\OneDrive - CRIF SpA\\CE\\model-workflow-tracker\\docker\\ce_python\\CategorizationEnginePython", "/app/CategorizationEnginePython"),
 ]
 
 def _fix(p):
@@ -122,34 +119,7 @@ def _safe_remove(p):
     return _real_os_remove(fixed)
 os.remove = _safe_remove
 
-# Patch subprocess.Popen to intercept Windows PowerShell commands (Azure Batch)
-# The library tries to launch pwsh.exe which doesn't exist on Linux.
-# We simulate a successful no-op process instead.
-import subprocess
-_real_popen = subprocess.Popen
-
-class _FakePopen:
-    """Simulates a completed process for intercepted Windows commands."""
-    def __init__(self, *a, **kw):
-        self.returncode = 0
-        self.pid = 0
-    def communicate(self, *a, **kw):
-        return (b"", b"")
-    def wait(self, *a, **kw):
-        return 0
-    def poll(self):
-        return 0
-
-def _patched_popen(cmd, *args, **kwargs):
-    cmd_str = cmd if isinstance(cmd, str) else " ".join(str(c) for c in cmd)
-    if "pwsh.exe" in cmd_str or "powershell" in cmd_str.lower():
-        print(f"[PATCH] subprocess.Popen intercepted Windows PowerShell command, returning fake process: {cmd_str[:120]}...")
-        return _FakePopen()
-    return _real_popen(cmd, *args, **kwargs)
-
-subprocess.Popen = _patched_popen
-
-print("[PATCH] Global path normalization patches applied (backslash -> forward slash, path remapping, shutil, subprocess)")
+print("[PATCH] Global path normalization patches applied (backslash -> forward slash, path remapping, shutil)")
 
 # Patch __init__ of MetricTrainTest and MetricValidationTestScore
 # These classes parse model folder names using path.split('\\'), so we must
@@ -280,36 +250,122 @@ def health_check():
 
 @app.get("/api/testsuite/countries")
 def list_countries():
-    """List available countries from S3"""
-    try:
-        countries = s3_helper.list_countries()
-        return {"countries": countries}
-    except Exception as e:
-        print(f"[S3] Error listing countries: {e}")
-        return {"countries": [], "error": str(e)}
+    """List available countries in the test suite folder"""
+    if not os.path.exists(DATA_ROOT):
+        return {"countries": [], "error": f"Data root not found: {DATA_ROOT}"}
+    
+    countries = [
+        d for d in os.listdir(DATA_ROOT)
+        if os.path.isdir(os.path.join(DATA_ROOT, d))
+    ]
+    return {"countries": sorted(countries)}
 
 
 @app.get("/api/testsuite/segments/{country}")
 def list_segments(country: str):
-    """List available segments for a country from S3"""
+    """List available segments for a country (case-insensitive)"""
+    country_path = os.path.join(DATA_ROOT, country)
+    if not os.path.exists(country_path):
+        raise HTTPException(status_code=404, detail=f"Country not found: {country}")
+    
+    # Map lowercase folder names to proper segment names
     segment_map = {
         "consumer": "Consumer",
         "business": "Business",
         "tagger": "Tagger"
     }
+    
+    segments = [
+        segment_map.get(d.lower(), d)
+        for d in os.listdir(country_path)
+        if os.path.isdir(os.path.join(country_path, d)) and d.lower() in segment_map
+    ]
+    return {"segments": segments}
+
+
+def find_segment_folder(country_path: str, segment: str) -> Optional[str]:
+    """Find the actual folder name for a segment (case-insensitive)"""
+    for d in os.listdir(country_path):
+        if d.lower() == segment.lower():
+            return d
+    return None
+
+
+def find_latest_date_folder(segment_path: str) -> Optional[str]:
+    """Find the most recent date folder in a segment path.
+    
+    Looks for folders that contain 'model' subfolder (the date folders).
+    Structure: country/segment/date_folder/model/
+    """
+    date_folders = []
     try:
-        raw_segments = s3_helper.list_segments(country)
-        segments = [segment_map.get(s.lower(), s) for s in raw_segments if s.lower() in segment_map]
-        return {"segments": segments}
+        for d in os.listdir(segment_path):
+            folder_path = os.path.join(segment_path, d)
+            if os.path.isdir(folder_path):
+                # Check if it looks like a date folder (contains model subfolder)
+                if os.path.exists(os.path.join(folder_path, "model")):
+                    date_folders.append(d)
+        
+        if date_folders:
+            # Sort descending to get most recent
+            date_folders.sort(reverse=True)
+            return date_folders[0]
     except Exception as e:
-        print(f"[S3] Error listing segments: {e}")
-        return {"segments": [], "error": str(e)}
+        print(f"Error finding date folder in {segment_path}: {e}")
+    return None
 
 
 @app.get("/api/testsuite/files/{country}/{segment}")
 def list_files(country: str, segment: str):
-    """List available files for a country/segment from S3."""
-    empty_result = {
+    """List available files for a country/segment combination.
+    
+    NEW Structure (sample inside date folder):
+    country/segment/date_folder/sample/           <- input files (.tsv.gz)
+    country/segment/date_folder/model/prod/       <- old models
+    country/segment/date_folder/model/develop/    <- new models
+    country/segment/date_folder/model/expertrules/  <- expert rules
+    country/segment/date_folder/output/           <- output folder
+    """
+    country_path = os.path.join(DATA_ROOT, country)
+    if not os.path.exists(country_path):
+        # Return empty result instead of 404 to prevent frontend crash
+        print(f"Country path not found: {country_path}")
+        return {
+            "sample_files": [],
+            "prod_models": [],
+            "dev_models": [],
+            "expert_rules_old": [],
+            "expert_rules_new": [],
+            "tagger_models": [],
+            "company_lists": [],
+            "date_folder": None,
+            "segment_folder": None,
+            "error": f"Country folder not found: {country}"
+        }
+    
+    # Find actual segment folder (case-insensitive)
+    actual_segment = find_segment_folder(country_path, segment)
+    if not actual_segment:
+        print(f"Segment not found: {segment} in {country_path}")
+        return {
+            "sample_files": [],
+            "prod_models": [],
+            "dev_models": [],
+            "expert_rules_old": [],
+            "expert_rules_new": [],
+            "tagger_models": [],
+            "company_lists": [],
+            "date_folder": None,
+            "segment_folder": None,
+            "error": f"Segment folder not found: {segment}"
+        }
+    
+    segment_path = os.path.join(country_path, actual_segment)
+    
+    # Find the latest date folder
+    date_folder = find_latest_date_folder(segment_path)
+    
+    result = {
         "sample_files": [],
         "prod_models": [],
         "dev_models": [],
@@ -317,62 +373,109 @@ def list_files(country: str, segment: str):
         "expert_rules_new": [],
         "tagger_models": [],
         "company_lists": [],
-        "date_folder": None,
-        "segment_folder": None,
+        "date_folder": date_folder,
+        "segment_folder": actual_segment
     }
-    try:
-        # Find actual segment folder name (case-insensitive)
-        raw_segments = s3_helper.list_segments(country)
-        actual_segment = None
-        for s in raw_segments:
-            if s.lower() == segment.lower():
-                actual_segment = s
-                break
-        if not actual_segment:
-            empty_result["error"] = f"Segment folder not found: {segment}"
-            return empty_result
-        
-        date_folder = s3_helper.find_latest_date_folder(country, actual_segment)
-        if not date_folder:
-            empty_result["segment_folder"] = actual_segment
-            empty_result["error"] = "No date folder found with 'model' subdirectory"
-            return empty_result
-        
-        result = s3_helper.list_files_for_segment(country, actual_segment, date_folder)
+    
+    if not date_folder:
+        print(f"No date folder found in {segment_path}")
+        result["error"] = "No date folder found with 'model' subdirectory"
         return result
-    except Exception as e:
-        print(f"[S3] Error listing files: {e}")
-        empty_result["error"] = str(e)
-        return empty_result
+    
+    work_path = os.path.join(segment_path, date_folder)
+    
+    # Input files (.tsv.gz) - from 'sample' folder INSIDE the date folder
+    sample_path = os.path.join(work_path, "sample")
+    if os.path.exists(sample_path):
+        try:
+            result["sample_files"] = sorted([
+                f for f in os.listdir(sample_path)
+                if f.endswith(".tsv.gz") or f.endswith(".tsv")
+            ])
+            result["company_lists"] = sorted([
+                f for f in os.listdir(sample_path)
+                if f.endswith(".xlsx") and "compan" in f.lower()
+            ])
+            print(f"Found {len(result['sample_files'])} sample files in {sample_path}")
+        except Exception as e:
+            print(f"Error reading sample folder {sample_path}: {e}")
+    else:
+        print(f"Sample folder not found: {sample_path}")
+    
+    # Model path - from date folder
+    model_path = os.path.join(work_path, "model")
+    
+    if segment.lower() in ["consumer", "business"]:
+        # Prod models (old)
+        prod_path = os.path.join(model_path, "prod")
+        if os.path.exists(prod_path):
+            try:
+                result["prod_models"] = sorted([f for f in os.listdir(prod_path) if f.endswith(".zip")])
+                print(f"Found {len(result['prod_models'])} prod models in {prod_path}")
+            except Exception as e:
+                print(f"Error reading prod folder {prod_path}: {e}")
+        
+        # Dev models (new)
+        dev_path = os.path.join(model_path, "develop")
+        if os.path.exists(dev_path):
+            try:
+                result["dev_models"] = sorted([f for f in os.listdir(dev_path) if f.endswith(".zip")])
+                print(f"Found {len(result['dev_models'])} dev models in {dev_path}")
+            except Exception as e:
+                print(f"Error reading develop folder {dev_path}: {e}")
+        
+        # Expert rules
+        expert_path = os.path.join(model_path, "expertrules")
+        if os.path.exists(expert_path):
+            try:
+                # Check for old/new subfolders
+                old_path = os.path.join(expert_path, "old")
+                new_path = os.path.join(expert_path, "new")
+                
+                if os.path.exists(old_path):
+                    result["expert_rules_old"] = sorted([f for f in os.listdir(old_path) if f.endswith(".zip")])
+                if os.path.exists(new_path):
+                    result["expert_rules_new"] = sorted([f for f in os.listdir(new_path) if f.endswith(".zip")])
+                
+                # If no old/new folders, list files directly from expertrules
+                if not result["expert_rules_old"] and not result["expert_rules_new"]:
+                    all_rules = sorted([f for f in os.listdir(expert_path) if f.endswith(".zip")])
+                    result["expert_rules_old"] = all_rules
+                    result["expert_rules_new"] = all_rules
+                    
+                print(f"Found {len(result['expert_rules_old'])} old rules, {len(result['expert_rules_new'])} new rules")
+            except Exception as e:
+                print(f"Error reading expertrules folder {expert_path}: {e}")
+    
+    elif segment.lower() == "tagger":
+        # Tagger models are directly in model folder
+        if os.path.exists(model_path):
+            try:
+                result["tagger_models"] = sorted([f for f in os.listdir(model_path) if f.endswith(".zip")])
+            except Exception as e:
+                print(f"Error reading tagger models: {e}")
+    
+    return result
 
 
 def run_consumer_business_tests(run_id: str, config: ConsumerBusinessConfig):
     """Background task to run Consumer/Business tests"""
     try:
         test_runs[run_id]["status"] = "running"
-        test_runs[run_id]["message"] = "Downloading data from S3..."
+        test_runs[run_id]["message"] = "Initializing TestRunner..."
         
         # Import TestRunner
         from suite_tests.testRunner import TestRunner
         
-        # Find actual segment folder name from S3
-        raw_segments = s3_helper.list_segments(config.country)
-        actual_segment = config.segment
-        for s in raw_segments:
-            if s.lower() == config.segment.lower():
-                actual_segment = s
-                break
+        today = datetime.date.today().strftime("%y%m%d")
+        segment_path = os.path.join(DATA_ROOT, config.country, config.segment)
         
-        # Find latest date folder from S3
-        date_folder = s3_helper.find_latest_date_folder(config.country, actual_segment)
+        # Find the latest date folder (e.g. 251219)
+        date_folder = find_latest_date_folder(segment_path)
         if not date_folder:
-            raise Exception(f"No date folder found for {config.country}/{actual_segment} in S3")
+            raise Exception(f"No date folder found in {segment_path}")
         
-        # Download all test data from S3 to local cache
-        test_runs[run_id]["message"] = "Downloading test data from S3..."
-        test_runs[run_id]["progress"] = 5
-        work_path = s3_helper.download_test_data(config.country, actual_segment, date_folder)
-        
+        work_path = os.path.join(segment_path, date_folder)
         output_folder = os.path.join(work_path, "output")
         os.makedirs(output_folder, exist_ok=True)
         
@@ -381,12 +484,13 @@ def run_consumer_business_tests(run_id: str, config: ConsumerBusinessConfig):
         old_model_path = os.path.join(model_path, "prod", config.old_model)
         new_model_path = os.path.join(model_path, "develop", config.new_model)
         
-        # Expert rules paths
+        # Expert rules paths - inside date_folder/model/expertrules/
         expert_path = os.path.join(model_path, "expertrules")
         old_expert = None
         new_expert = None
         
         if config.old_expert_rules:
+            # Try old subfolder first, then main folder
             old_subfolder = os.path.join(expert_path, "old", config.old_expert_rules)
             if os.path.exists(old_subfolder):
                 old_expert = old_subfolder
@@ -432,41 +536,59 @@ def run_consumer_business_tests(run_id: str, config: ConsumerBusinessConfig):
             current_test += 1
             test_runs[run_id]["message"] = f"Running accuracy test {i}/{len(config.accuracy_files)}..."
             test_runs[run_id]["progress"] = 10 + int((current_test / total_tests) * 80)
+            
             runner.compute_validation_scores(
-                os.path.join(sample_path, f), save=True, tag=f"A_{i}",
-                azure_batch=config.azure_batch, azure_batch_vm_path=AZURE_BATCH_VM_PATH,
-                old_expert_rules_zip_path=old_expert, new_expert_rules_zip_path=new_expert,
+                os.path.join(sample_path, f),
+                save=True,
+                tag=f"A_{i}",
+                azure_batch=config.azure_batch,
+                azure_batch_vm_path=AZURE_BATCH_VM_PATH,
+                old_expert_rules_zip_path=old_expert,
+                new_expert_rules_zip_path=new_expert,
                 ServicePrincipal_CertificateThumbprint=CERT_THUMBPRINT,
                 ServicePrincipal_ApplicationId=APP_ID,
-                vm_for_bench=config.vm_bench, vm_for_dev=config.vm_dev
+                vm_for_bench=config.vm_bench,
+                vm_for_dev=config.vm_dev
             )
         
         # Anomalies tests
         for f in config.anomalies_files:
             current_test += 1
-            test_runs[run_id]["message"] = "Running anomalies test..."
+            test_runs[run_id]["message"] = f"Running anomalies test..."
             test_runs[run_id]["progress"] = 10 + int((current_test / total_tests) * 80)
+            
             runner.compute_validation_scores(
-                os.path.join(sample_path, f), save=True, tag="ANOM",
-                azure_batch=config.azure_batch, azure_batch_vm_path=AZURE_BATCH_VM_PATH,
-                old_expert_rules_zip_path=old_expert, new_expert_rules_zip_path=new_expert,
+                os.path.join(sample_path, f),
+                save=True,
+                tag="ANOM",
+                azure_batch=config.azure_batch,
+                azure_batch_vm_path=AZURE_BATCH_VM_PATH,
+                old_expert_rules_zip_path=old_expert,
+                new_expert_rules_zip_path=new_expert,
                 ServicePrincipal_CertificateThumbprint=CERT_THUMBPRINT,
                 ServicePrincipal_ApplicationId=APP_ID,
-                vm_for_bench=config.vm_bench, vm_for_dev=config.vm_dev
+                vm_for_bench=config.vm_bench,
+                vm_for_dev=config.vm_dev
             )
         
         # Precision tests
         for f in config.precision_files:
             current_test += 1
-            test_runs[run_id]["message"] = "Running precision test..."
+            test_runs[run_id]["message"] = f"Running precision test..."
             test_runs[run_id]["progress"] = 10 + int((current_test / total_tests) * 80)
+            
             runner.compute_validation_scores(
-                os.path.join(sample_path, f), save=True, tag="PREC",
-                azure_batch=config.azure_batch, azure_batch_vm_path=AZURE_BATCH_VM_PATH,
-                old_expert_rules_zip_path=old_expert, new_expert_rules_zip_path=new_expert,
+                os.path.join(sample_path, f),
+                save=True,
+                tag="PREC",
+                azure_batch=config.azure_batch,
+                azure_batch_vm_path=AZURE_BATCH_VM_PATH,
+                old_expert_rules_zip_path=old_expert,
+                new_expert_rules_zip_path=new_expert,
                 ServicePrincipal_CertificateThumbprint=CERT_THUMBPRINT,
                 ServicePrincipal_ApplicationId=APP_ID,
-                vm_for_bench=config.vm_bench, vm_for_dev=config.vm_dev
+                vm_for_bench=config.vm_bench,
+                vm_for_dev=config.vm_dev
             )
         
         # Stability tests
@@ -474,24 +596,25 @@ def run_consumer_business_tests(run_id: str, config: ConsumerBusinessConfig):
             current_test += 1
             test_runs[run_id]["message"] = f"Running stability test {i}/{len(config.stability_files)}..."
             test_runs[run_id]["progress"] = 10 + int((current_test / total_tests) * 80)
+            
             runner.compute_validation_distribution(
-                os.path.join(sample_path, f), save=True, tag=f"S_{i}",
-                azure_batch=config.azure_batch, azure_batch_vm_path=AZURE_BATCH_VM_PATH,
-                old_expert_rules_zip_path=old_expert, new_expert_rules_zip_path=new_expert,
+                os.path.join(sample_path, f),
+                save=True,
+                tag=f"S_{i}",
+                azure_batch=config.azure_batch,
+                azure_batch_vm_path=AZURE_BATCH_VM_PATH,
+                old_expert_rules_zip_path=old_expert,
+                new_expert_rules_zip_path=new_expert,
                 ServicePrincipal_CertificateThumbprint=CERT_THUMBPRINT,
                 ServicePrincipal_ApplicationId=APP_ID,
-                vm_for_bench=config.vm_bench, vm_for_dev=config.vm_dev
+                vm_for_bench=config.vm_bench,
+                vm_for_dev=config.vm_dev
             )
         
         # Save reports
         test_runs[run_id]["message"] = "Saving reports..."
-        test_runs[run_id]["progress"] = 92
+        test_runs[run_id]["progress"] = 95
         runner.save_reports(weights=None, excel=True, pdf=False)
-        
-        # Upload outputs to S3
-        test_runs[run_id]["message"] = "Uploading outputs to S3..."
-        test_runs[run_id]["progress"] = 96
-        s3_helper.upload_outputs(config.country, actual_segment, date_folder, output_folder)
         
         test_runs[run_id]["status"] = "completed"
         test_runs[run_id]["progress"] = 100
@@ -511,29 +634,22 @@ def run_tagger_tests(run_id: str, config: TaggerConfig):
     """Background task to run Tagger tests"""
     try:
         test_runs[run_id]["status"] = "running"
-        test_runs[run_id]["message"] = "Downloading tagger data from S3..."
+        test_runs[run_id]["message"] = "Initializing Tagger TestRunner..."
         
         from suite_tests.testRunner_tagger import TestRunner as TestRunnerTagger
         
-        # Find actual segment folder
-        actual_segment = "Tagger"
-        raw_segments = s3_helper.list_segments(config.country)
-        for s in raw_segments:
-            if s.lower() == "tagger":
-                actual_segment = s
-                break
+        segment_path = os.path.join(DATA_ROOT, config.country, "Tagger")
         
-        date_folder = s3_helper.find_latest_date_folder(config.country, actual_segment)
+        # Find the latest date folder
+        date_folder = find_latest_date_folder(segment_path)
         if not date_folder:
-            raise Exception(f"No date folder found for {config.country}/{actual_segment} in S3")
+            raise Exception(f"No date folder found in {segment_path}")
         
-        # Download data from S3
-        test_runs[run_id]["progress"] = 5
-        work_path = s3_helper.download_test_data(config.country, actual_segment, date_folder)
-        
+        work_path = os.path.join(segment_path, date_folder)
         output_folder = os.path.join(work_path, "output")
         os.makedirs(output_folder, exist_ok=True)
         
+        # Model paths - inside date_folder/model/
         model_path = os.path.join(work_path, "model")
         old_model_path = os.path.join(model_path, config.old_model)
         new_model_path = os.path.join(model_path, config.new_model)
@@ -547,10 +663,12 @@ def run_tagger_tests(run_id: str, config: TaggerConfig):
         
         runner = TestRunnerTagger(old_model_path, new_model_path, output_folder)
         
+        # Crossvalidation
         test_runs[run_id]["message"] = "Running tagger crossvalidation..."
         test_runs[run_id]["progress"] = 30
         runner.compute_tagger_crossvalidation_score(save=True)
         
+        # Validation distribution
         test_runs[run_id]["message"] = "Running tagger validation distribution..."
         test_runs[run_id]["progress"] = 60
         runner.compute_tagger_validation_distribution(
@@ -565,19 +683,17 @@ def run_tagger_tests(run_id: str, config: TaggerConfig):
             vm_for_dev=config.vm_dev
         )
         
+        # Save reports
         test_runs[run_id]["message"] = "Saving reports..."
-        test_runs[run_id]["progress"] = 88
+        test_runs[run_id]["progress"] = 90
         runner.save_tagger_reports(excel=True)
-        
-        # Upload outputs to S3
-        test_runs[run_id]["message"] = "Uploading outputs to S3..."
-        test_runs[run_id]["progress"] = 95
-        s3_helper.upload_outputs(config.country, actual_segment, date_folder, output_folder)
         
         test_runs[run_id]["status"] = "completed"
         test_runs[run_id]["progress"] = 100
         test_runs[run_id]["message"] = "Tagger tests completed successfully!"
-        test_runs[run_id]["result"] = {"output_folder": output_folder}
+        test_runs[run_id]["result"] = {
+            "output_folder": output_folder
+        }
         
     except Exception as e:
         test_runs[run_id]["status"] = "failed"
