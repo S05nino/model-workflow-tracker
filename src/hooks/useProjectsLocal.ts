@@ -146,14 +146,14 @@ export function useProjectsLocal() {
     updatedRounds[currentRoundIndex] = {
       ...updatedRounds[currentRoundIndex],
       currentStep: step,
-      ...(step === 3 ? { completedAt: new Date().toISOString() } : {}),
+      ...(step === 5 ? { completedAt: new Date().toISOString() } : {}),
     };
 
     await saveProject({
       id: projectId,
       rounds: updatedRounds,
-      status: step === 3 ? 'waiting' : project.status,
-      awaiting_confirmation: step === 3 ? true : project.awaitingConfirmation,
+      status: step === 5 ? 'waiting' : project.status,
+      awaiting_confirmation: step === 5 ? true : project.awaitingConfirmation,
       updated_at: new Date().toISOString(),
     });
   };

@@ -48,9 +48,6 @@ interface FileOptions {
   segment_folder?: string;
 }
 
-// Store the current date_folder for use in API calls
-let currentDateFolder: string | null = null;
-
 interface TestRun {
   run_id: string;
   status: "pending" | "running" | "completed" | "failed";
@@ -325,7 +322,6 @@ export const TestSuiteSection = () => {
         };
 
         setFileOptions(newOptions);
-        currentDateFolder = newOptions.date_folder || null;
 
         if (newOptions.date_folder) {
           console.log(`Working folder detected: ${newOptions.date_folder}`);
@@ -426,7 +422,6 @@ export const TestSuiteSection = () => {
               vm_dev: config.vmDev,
               company_list: config.companyList,
               distribution_data: config.distributionData,
-              date_folder: currentDateFolder,
             }
           : {
               country: config.country,
@@ -442,7 +437,6 @@ export const TestSuiteSection = () => {
               stability_files: config.stabilityFiles,
               vm_bench: config.vmBench,
               vm_dev: config.vmDev,
-              date_folder: currentDateFolder,
             };
 
       const response = await fetch(endpoint, {

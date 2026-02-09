@@ -1,19 +1,13 @@
-import { useEffect, useRef } from 'react';
 import { useReleasesAdapter as useReleases, useCountriesAdapter as useCountries } from '@/hooks/adapters';
 import { ReleaseCard } from './ReleaseCard';
 import { NewReleaseDialog } from './NewReleaseDialog';
 import { ManageCountriesDialog } from './ManageCountriesDialog';
-import { Segment, TestType, WorkflowStep } from '@/types/project';
-import { ReleaseModel, ReleaseModelIds } from '@/types/release';
+import { Segment } from '@/types/project';
+import { ReleaseModelIds } from '@/types/release';
 import { Package } from 'lucide-react';
 import { parseISO, compareAsc } from 'date-fns';
 
-interface ReleasesSectionProps {
-  targetReleaseId?: string | null;
-}
-
-export function ReleasesSection({ targetReleaseId }: ReleasesSectionProps) {
-  const releaseRefs = useRef<Record<string, HTMLDivElement | null>>({});
+export function ReleasesSection() {
   const {
     releases,
     addRelease,
@@ -23,9 +17,6 @@ export function ReleasesSection({ targetReleaseId }: ReleasesSectionProps) {
     deleteRelease,
     completeRelease,
     updateReleaseDate,
-    updateModelStep,
-    startNewRound,
-    updateModelStatus,
   } = useReleases();
 
   const { countries, addCountry, removeCountry } = useCountries();
@@ -54,18 +45,6 @@ export function ReleasesSection({ targetReleaseId }: ReleasesSectionProps) {
     completeRelease(releaseId);
   };
 
-  const handleUpdateModelStep = (releaseId: string, modelId: string, step: WorkflowStep) => {
-    updateModelStep(releaseId, modelId, step);
-  };
-
-  const handleStartNewRound = (releaseId: string, modelId: string, testType: TestType) => {
-    startNewRound(releaseId, modelId, testType);
-  };
-
-  const handleUpdateModelStatus = (releaseId: string, modelId: string, status: ReleaseModel['status']) => {
-    updateModelStatus(releaseId, modelId, status);
-  };
-
   const handleAddCountry = (country: { code: string; name: string; segments: Segment[] }) => {
     addCountry(country);
   };
@@ -73,13 +52,6 @@ export function ReleasesSection({ targetReleaseId }: ReleasesSectionProps) {
   const handleRemoveCountry = (countryCode: string) => {
     removeCountry(countryCode);
   };
-
-  // Scroll to target release when navigating from Projects
-  useEffect(() => {
-    if (targetReleaseId && releaseRefs.current[targetReleaseId]) {
-      releaseRefs.current[targetReleaseId]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  }, [targetReleaseId]);
 
   const activeReleases = releases
     .filter(r => !r.completed)
@@ -132,25 +104,17 @@ export function ReleasesSection({ targetReleaseId }: ReleasesSectionProps) {
               </h3>
               <div className="space-y-4">
                 {activeReleases.map((release) => (
-                  <div 
+                  <ReleaseCard
                     key={release.id}
-                    ref={(el) => { releaseRefs.current[release.id] = el; }}
-                    className={targetReleaseId === release.id ? 'ring-2 ring-primary rounded-lg' : ''}
-                  >
-                    <ReleaseCard
-                      release={release}
-                      countries={countries}
-                      onToggleInclusion={(modelId) => toggleModelInclusion(release.id, modelId)}
-                      onConfirmModel={(modelId, modelIds) => handleConfirmModel(release.id, modelId, modelIds)}
-                      onAddModel={(country, segment) => handleAddModel(release.id, country, segment)}
-                      onUpdateDate={(newDate) => handleUpdateDate(release.id, newDate)}
-                      onDelete={() => handleDeleteRelease(release.id)}
-                      onComplete={() => handleCompleteRelease(release.id)}
-                      onUpdateModelStep={(modelId, step) => handleUpdateModelStep(release.id, modelId, step)}
-                      onStartNewRound={(modelId, testType) => handleStartNewRound(release.id, modelId, testType)}
-                      onUpdateModelStatus={(modelId, status) => handleUpdateModelStatus(release.id, modelId, status)}
-                    />
-                  </div>
+                    release={release}
+                    countries={countries}
+                    onToggleInclusion={(modelId) => toggleModelInclusion(release.id, modelId)}
+                    onConfirmModel={(modelId, modelIds) => handleConfirmModel(release.id, modelId, modelIds)}
+                    onAddModel={(country, segment) => handleAddModel(release.id, country, segment)}
+                    onUpdateDate={(newDate) => handleUpdateDate(release.id, newDate)}
+                    onDelete={() => handleDeleteRelease(release.id)}
+                    onComplete={() => handleCompleteRelease(release.id)}
+                  />
                 ))}
               </div>
             </div>
@@ -163,25 +127,17 @@ export function ReleasesSection({ targetReleaseId }: ReleasesSectionProps) {
               </h3>
               <div className="space-y-4">
                 {completedReleases.map((release) => (
-                  <div 
+                  <ReleaseCard
                     key={release.id}
-                    ref={(el) => { releaseRefs.current[release.id] = el; }}
-                    className={targetReleaseId === release.id ? 'ring-2 ring-primary rounded-lg' : ''}
-                  >
-                    <ReleaseCard
-                      release={release}
-                      countries={countries}
-                      onToggleInclusion={(modelId) => toggleModelInclusion(release.id, modelId)}
-                      onConfirmModel={(modelId, modelIds) => handleConfirmModel(release.id, modelId, modelIds)}
-                      onAddModel={(country, segment) => handleAddModel(release.id, country, segment)}
-                      onUpdateDate={(newDate) => handleUpdateDate(release.id, newDate)}
-                      onDelete={() => handleDeleteRelease(release.id)}
-                      onComplete={() => handleCompleteRelease(release.id)}
-                      onUpdateModelStep={(modelId, step) => handleUpdateModelStep(release.id, modelId, step)}
-                      onStartNewRound={(modelId, testType) => handleStartNewRound(release.id, modelId, testType)}
-                      onUpdateModelStatus={(modelId, status) => handleUpdateModelStatus(release.id, modelId, status)}
-                    />
-                  </div>
+                    release={release}
+                    countries={countries}
+                    onToggleInclusion={(modelId) => toggleModelInclusion(release.id, modelId)}
+                    onConfirmModel={(modelId, modelIds) => handleConfirmModel(release.id, modelId, modelIds)}
+                    onAddModel={(country, segment) => handleAddModel(release.id, country, segment)}
+                    onUpdateDate={(newDate) => handleUpdateDate(release.id, newDate)}
+                    onDelete={() => handleDeleteRelease(release.id)}
+                    onComplete={() => handleCompleteRelease(release.id)}
+                  />
                 ))}
               </div>
             </div>

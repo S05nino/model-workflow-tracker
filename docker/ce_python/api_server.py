@@ -56,7 +56,6 @@ class TestConfigBase(BaseModel):
     vm_bench: int = 1
     vm_dev: int = 2
     azure_batch: bool = True
-    date_folder: Optional[str] = None  # Date folder containing model/sample/output
 
 
 class ConsumerBusinessConfig(TestConfigBase):
@@ -323,28 +322,15 @@ def run_consumer_business_tests(run_id: str, config: ConsumerBusinessConfig):
         
         today = datetime.date.today().strftime("%y%m%d")
         segment_path = os.path.join(DATA_ROOT, config.country, config.segment)
-        
-        # Use date_folder if provided, otherwise create a new one
-        if config.date_folder:
-            work_path = os.path.join(segment_path, config.date_folder)
-        else:
-            # Fallback: find latest date folder
-            work_path = segment_path
-            date_folder = find_latest_date_folder(segment_path)
-            if date_folder:
-                work_path = os.path.join(segment_path, date_folder)
-        
-        # Output folder is inside the work path
-        output_folder = os.path.join(work_path, "output")
+        output_folder = os.path.join(segment_path, f"{config.version}_{today}")
         os.makedirs(output_folder, exist_ok=True)
         
-        # Model paths - inside date_folder/model/
-        model_path = os.path.join(work_path, "model")
-        old_model_path = os.path.join(model_path, "prod", config.old_model)
-        new_model_path = os.path.join(model_path, "develop", config.new_model)
+        # Model paths
+        old_model_path = os.path.join(segment_path, "model", "prod", config.old_model)
+        new_model_path = os.path.join(segment_path, "model", "develop", config.new_model)
         
         # Expert rules paths
-        expert_path = os.path.join(model_path, "expertrules")
+        expert_path = os.path.join(segment_path, "model", "expertrules")
         old_expert = None
         new_expert = None
         
@@ -364,25 +350,6 @@ def run_consumer_business_tests(run_id: str, config: ConsumerBusinessConfig):
                 new_expert = os.path.join(expert_path, config.new_expert_rules)
         
         test_runs[run_id]["message"] = "Creating TestRunner instance..."
-        print(f"=== TestRunner Configuration ===")
-        print(f"Country: {config.country}")
-        print(f"Segment: {config.segment}")
-        print(f"Date folder: {config.date_folder}")
-        print(f"Work path: {work_path}")
-        print(f"Old model path: {old_model_path}")
-        print(f"New model path: {new_model_path}")
-        print(f"Old expert rules: {old_expert}")
-        print(f"New expert rules: {new_expert}")
-        print(f"Output folder: {output_folder}")
-        print(f"VM Bench: {config.vm_bench} (type: {type(config.vm_bench).__name__})")
-        print(f"VM Dev: {config.vm_dev} (type: {type(config.vm_dev).__name__})")
-        print(f"================================")
-        
-        # Verify paths exist
-        if not os.path.exists(old_model_path):
-            raise FileNotFoundError(f"Old model not found: {old_model_path}")
-        if not os.path.exists(new_model_path):
-            raise FileNotFoundError(f"New model not found: {new_model_path}")
         
         runner = TestRunner(
             old_model_path,
@@ -401,8 +368,7 @@ def run_consumer_business_tests(run_id: str, config: ConsumerBusinessConfig):
             save=True
         )
         
-        # Sample path - inside date_folder/sample/
-        sample_path = os.path.join(work_path, "sample")
+        sample_path = os.path.join(segment_path, "sample")
         total_tests = len(config.accuracy_files) + len(config.anomalies_files) + \
                      len(config.precision_files) + len(config.stability_files)
         current_test = 0
@@ -423,8 +389,8 @@ def run_consumer_business_tests(run_id: str, config: ConsumerBusinessConfig):
                 new_expert_rules_zip_path=new_expert,
                 ServicePrincipal_CertificateThumbprint=CERT_THUMBPRINT,
                 ServicePrincipal_ApplicationId=APP_ID,
-                vm_for_bench=int(config.vm_bench),
-                vm_for_dev=int(config.vm_dev)
+                vm_for_bench=config.vm_bench,
+                vm_for_dev=config.vm_dev
             )
         
         # Anomalies tests
@@ -443,8 +409,8 @@ def run_consumer_business_tests(run_id: str, config: ConsumerBusinessConfig):
                 new_expert_rules_zip_path=new_expert,
                 ServicePrincipal_CertificateThumbprint=CERT_THUMBPRINT,
                 ServicePrincipal_ApplicationId=APP_ID,
-                vm_for_bench=int(config.vm_bench),
-                vm_for_dev=int(config.vm_dev)
+                vm_for_bench=config.vm_bench,
+                vm_for_dev=config.vm_dev
             )
         
         # Precision tests
@@ -463,8 +429,8 @@ def run_consumer_business_tests(run_id: str, config: ConsumerBusinessConfig):
                 new_expert_rules_zip_path=new_expert,
                 ServicePrincipal_CertificateThumbprint=CERT_THUMBPRINT,
                 ServicePrincipal_ApplicationId=APP_ID,
-                vm_for_bench=int(config.vm_bench),
-                vm_for_dev=int(config.vm_dev)
+                vm_for_bench=config.vm_bench,
+                vm_for_dev=config.vm_dev
             )
         
         # Stability tests
@@ -483,8 +449,8 @@ def run_consumer_business_tests(run_id: str, config: ConsumerBusinessConfig):
                 new_expert_rules_zip_path=new_expert,
                 ServicePrincipal_CertificateThumbprint=CERT_THUMBPRINT,
                 ServicePrincipal_ApplicationId=APP_ID,
-                vm_for_bench=int(config.vm_bench),
-                vm_for_dev=int(config.vm_dev)
+                vm_for_bench=config.vm_bench,
+                vm_for_dev=config.vm_dev
             )
         
         # Save reports
@@ -514,25 +480,16 @@ def run_tagger_tests(run_id: str, config: TaggerConfig):
         
         from suite_tests.testRunner_tagger import TestRunner as TestRunnerTagger
         
+        today = datetime.date.today().strftime("%y%m%d")
         segment_path = os.path.join(DATA_ROOT, config.country, "Tagger")
-        
-        # Use date_folder if provided
-        if config.date_folder:
-            work_path = os.path.join(segment_path, config.date_folder)
-        else:
-            work_path = segment_path
-            date_folder = find_latest_date_folder(segment_path)
-            if date_folder:
-                work_path = os.path.join(segment_path, date_folder)
-        
-        output_folder = os.path.join(work_path, "output")
+        output_folder = os.path.join(segment_path, f"{config.version}_{today}")
         os.makedirs(output_folder, exist_ok=True)
         
-        model_path = os.path.join(work_path, "model")
+        model_path = os.path.join(segment_path, "model")
         old_model_path = os.path.join(model_path, config.old_model)
         new_model_path = os.path.join(model_path, config.new_model)
         
-        sample_path = os.path.join(work_path, "sample")
+        sample_path = os.path.join(segment_path, "sample")
         company_list_path = os.path.join(sample_path, config.company_list)
         distribution_path = os.path.join(sample_path, config.distribution_data)
         
@@ -557,8 +514,8 @@ def run_tagger_tests(run_id: str, config: TaggerConfig):
             path_list_companies=company_list_path,
             ServicePrincipal_CertificateThumbprint=CERT_THUMBPRINT,
             ServicePrincipal_ApplicationId=APP_ID,
-            vm_for_bench=int(config.vm_bench),
-            vm_for_dev=int(config.vm_dev)
+            vm_for_bench=config.vm_bench,
+            vm_for_dev=config.vm_dev
         )
         
         # Save reports

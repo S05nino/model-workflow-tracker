@@ -47,7 +47,7 @@ export function ProjectCard({
   onDelete,
 }: ProjectCardProps) {
   const currentRoundData = project.rounds.find(r => r.roundNumber === project.currentRound);
-  const isRoundCompleted = currentRoundData?.currentStep === 3;
+  const isRoundCompleted = currentRoundData?.currentStep === 5;
   const isProjectCompleted = project.status === 'completed';
   
   const countryConfig = countries.find(c => c.code === project.country);
