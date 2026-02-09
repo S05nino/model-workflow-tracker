@@ -21,28 +21,23 @@ CE_TESTS_PATH = os.path.join(CE_PYTHON_PATH, "CategorizationEngineTests", "CETes
 sys.path.insert(0, CE_PYTHON_PATH)
 sys.path.insert(0, CE_TESTS_PATH)
 
-# --- Monkey-patch: fix Windows-only path parsing in MetricTrainTest ---
-# The library uses path.split('\\') to extract the model folder name,
-# which fails on Linux/Docker. Instead of converting all paths to backslash
-# (which breaks every file I/O call), we patch os.path and builtins so that
-# ALL path operations transparently convert backslashes to forward slashes.
+# --- Monkey-patch: fix Windows-only path parsing in multiple library classes ---
+# Classes like MetricTrainTest and MetricValidationTestScore use path.split('\\')
+# to extract model folder names, which fails on Linux/Docker.
+# We patch all such classes with a generic wrapper.
 import builtins
 
-try:
-    from suite_tests import MetricTrainTest as _MTT
-    _orig_MTT_init = _MTT.MetricTrainTest.__init__
-
-    def _patched_MTT_init(self, old_model_path, new_model_path, output_folder, *args, **kwargs):
-        # Convert to backslash so the library's split('\\') parsing works
+def _make_patched_init(orig_init, class_name):
+    """Create a patched __init__ that converts paths to backslash for parsing,
+    while patching all I/O functions to normalize back to forward slash."""
+    def _patched_init(self, old_model_path, new_model_path, output_folder, *args, **kwargs):
         old_bs = old_model_path.replace('/', '\\') if old_model_path else old_model_path
         new_bs = new_model_path.replace('/', '\\') if new_model_path else new_model_path
         out_bs = output_folder.replace('/', '\\') if output_folder else output_folder
 
-        # Helper: normalize any path string from backslash to forward slash
         def _fix(p):
             return p.replace('\\', '/') if isinstance(p, str) else p
 
-        # Save originals
         _real_chdir = os.chdir
         _real_isdir = os.path.isdir
         _real_exists = os.path.exists
@@ -52,7 +47,6 @@ try:
         _real_join = os.path.join
         _real_open = builtins.open
 
-        # Patch all os/path functions to normalize backslashes
         os.chdir = lambda p: _real_chdir(_fix(p))
         os.path.isdir = lambda p: _real_isdir(_fix(p))
         os.path.exists = lambda p: _real_exists(_fix(p))
@@ -62,11 +56,10 @@ try:
         os.path.join = lambda *parts: _real_join(*[_fix(p) for p in parts])
         builtins.open = lambda f, *a, **kw: _real_open(_fix(f), *a, **kw)
 
-        print(f"[PATCH] Calling MetricTrainTest with backslash paths for parsing")
+        print(f"[PATCH] Calling {class_name} with backslash paths for parsing")
         try:
-            _orig_MTT_init(self, old_bs, new_bs, out_bs, *args, **kwargs)
+            orig_init(self, old_bs, new_bs, out_bs, *args, **kwargs)
         finally:
-            # Restore ALL original functions
             os.chdir = _real_chdir
             os.path.isdir = _real_isdir
             os.path.exists = _real_exists
@@ -76,16 +69,27 @@ try:
             os.path.join = _real_join
             builtins.open = _real_open
 
-        # Restore Linux-compatible paths on the instance
         self.old_model_path = old_model_path
         self.new_model_path = new_model_path
         self.output_folder = output_folder
-        print(f"[PATCH] Init complete, Linux paths restored")
+        print(f"[PATCH] {class_name} init complete, Linux paths restored")
+    return _patched_init
 
-    _MTT.MetricTrainTest.__init__ = _patched_MTT_init
+# Patch MetricTrainTest
+try:
+    from suite_tests import MetricTrainTest as _MTT
+    _MTT.MetricTrainTest.__init__ = _make_patched_init(_MTT.MetricTrainTest.__init__, "MetricTrainTest")
     print("[PATCH] MetricTrainTest.__init__ patched for Linux path compatibility")
 except Exception as e:
     print(f"[PATCH] Warning: Could not patch MetricTrainTest: {e}")
+
+# Patch MetricValidationTestScore
+try:
+    from suite_tests import MetricValidationTestScore as _MVTS
+    _MVTS.MetricValidationTestScore.__init__ = _make_patched_init(_MVTS.MetricValidationTestScore.__init__, "MetricValidationTestScore")
+    print("[PATCH] MetricValidationTestScore.__init__ patched for Linux path compatibility")
+except Exception as e:
+    print(f"[PATCH] Warning: Could not patch MetricValidationTestScore: {e}")
 
 app = FastAPI(title="CE Test Suite API", version="1.0.0")
 
