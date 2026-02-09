@@ -35,7 +35,7 @@ const INITIAL_PROJECTS: Project[] = [
         id: "r-rep-ceca-1",
         roundNumber: 1,
         testType: "test-suite",
-        currentStep: 5,
+        currentStep: 3,
         startedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
         completedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
       },
@@ -73,7 +73,7 @@ const INITIAL_PROJECTS: Project[] = [
         id: "r-italia-1",
         roundNumber: 1,
         testType: "test-suite",
-        currentStep: 5,
+        currentStep: 3,
         startedAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
         completedAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
       },
@@ -96,7 +96,7 @@ export function useProjects() {
         parsed.length > 0 &&
         (!parsed[0].segment ||
           !parsed.find((p: Project) => p.country === "ITA") ||
-          parsed.some((p: Project) => p.rounds?.some((r: WorkflowRound) => r.currentStep > 5)));
+          parsed.some((p: Project) => p.rounds?.some((r: WorkflowRound) => r.currentStep > 3)));
       if (needsReset) {
         setProjects(INITIAL_PROJECTS);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_PROJECTS));
@@ -151,14 +151,14 @@ export function useProjects() {
       updatedRounds[currentRoundIndex] = {
         ...updatedRounds[currentRoundIndex],
         currentStep: step,
-        ...(step === 5 ? { completedAt: new Date().toISOString() } : {}),
+        ...(step === 3 ? { completedAt: new Date().toISOString() } : {}),
       };
 
       return {
         ...project,
         rounds: updatedRounds,
         updatedAt: new Date().toISOString(),
-        ...(step === 5 ? { awaitingConfirmation: true, status: "waiting" as const } : {}),
+        ...(step === 3 ? { awaitingConfirmation: true, status: "waiting" as const } : {}),
       };
     });
 

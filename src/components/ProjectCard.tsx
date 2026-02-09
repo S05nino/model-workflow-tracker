@@ -47,7 +47,7 @@ export function ProjectCard({
   onDelete,
 }: ProjectCardProps) {
   const currentRoundData = project.rounds.find(r => r.roundNumber === project.currentRound);
-  const isRoundCompleted = currentRoundData?.currentStep === 5;
+  const isRoundCompleted = currentRoundData?.currentStep === 3;
   const isProjectCompleted = project.status === 'completed';
   
   const countryConfig = countries.find(c => c.code === project.country);
@@ -56,7 +56,7 @@ export function ProjectCard({
   const currentStepLabel = currentRoundData ? WORKFLOW_STEPS[currentRoundData.currentStep]?.label : '';
 
   const handleAdvanceStep = () => {
-    if (currentRoundData && currentRoundData.currentStep < 5) {
+    if (currentRoundData && currentRoundData.currentStep < 3) {
       onUpdateStep((currentRoundData.currentStep + 1) as WorkflowStep);
     }
   };
