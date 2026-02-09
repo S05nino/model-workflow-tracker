@@ -1,5 +1,7 @@
-import { useReleasesAdapter as useReleases, useCountriesAdapter as useCountries } from '@/hooks/adapters';
+import { useState } from 'react';
+import { useReleasesAdapter as useReleases, useCountriesAdapter as useCountries, useProjectsAdapter as useProjects } from '@/hooks/adapters';
 import { DashboardStats } from '@/components/DashboardStats';
+import { ProjectsSection } from '@/components/ProjectsSection';
 import { ReleasesSection } from '@/components/ReleasesSection';
 import { TestSuiteSection } from '@/components/TestSuiteSection';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -12,22 +14,21 @@ import { exportDashboardReport } from '@/lib/exportReport';
 const Index = () => {
   const { releases } = useReleases();
   const { countries } = useCountries();
+  const projectsHook = useProjects();
+  const projects = projectsHook.projects;
 
-  // Convert releases to projects format for stats and export
-  const projects = releases.flatMap(r => 
-    r.models.map(m => ({
-      id: m.id,
-      country: m.country,
-      segment: m.segment,
-      status: m.status,
-      currentRound: m.currentRound,
-      rounds: m.rounds,
-      createdAt: r.createdAt,
-      updatedAt: r.updatedAt,
-      confirmedAt: m.confirmedAt,
-      awaitingConfirmation: m.status === 'waiting',
-    }))
-  );
+  // State for active tab - to enable navigation from Projects to Releases
+  const [activeTab, setActiveTab] = useState('progetti');
+  const [targetReleaseId, setTargetReleaseId] = useState<string | null>(null);
+
+  // Handle navigation from ProjectsSection to ReleasesSection
+  const handleNavigateToRelease = (releaseId: string) => {
+    setTargetReleaseId(releaseId);
+    setActiveTab('releases');
+    toast.info('Naviga al Rilascio', {
+      description: 'Apri la scheda del rilascio per completare la conferma',
+    });
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -69,15 +70,22 @@ const Index = () => {
           <DashboardStats projects={projects as any} />
         </section>
 
-        {/* Tabs for Releases and TestSuite */}
-        <Tabs defaultValue="releases" className="animate-fade-in" style={{ animationDelay: '0.2s' }}>
+        {/* Tabs for Projects, Releases, and TestSuite */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="animate-fade-in" style={{ animationDelay: '0.2s' }}>
           <TabsList className="mb-6">
+            <TabsTrigger value="progetti">Progetti</TabsTrigger>
             <TabsTrigger value="releases">Rilasci</TabsTrigger>
             <TabsTrigger value="testsuite">TestSuite</TabsTrigger>
           </TabsList>
 
+          <TabsContent value="progetti">
+            <ErrorBoundary fallbackTitle="Errore nei Progetti">
+              <ProjectsSection onNavigateToRelease={handleNavigateToRelease} />
+            </ErrorBoundary>
+          </TabsContent>
+
           <TabsContent value="releases">
-            <ReleasesSection />
+            <ReleasesSection targetReleaseId={targetReleaseId} />
           </TabsContent>
 
           <TabsContent value="testsuite">
