@@ -364,9 +364,25 @@ def run_consumer_business_tests(run_id: str, config: ConsumerBusinessConfig):
                 new_expert = os.path.join(expert_path, config.new_expert_rules)
         
         test_runs[run_id]["message"] = "Creating TestRunner instance..."
+        print(f"=== TestRunner Configuration ===")
+        print(f"Country: {config.country}")
+        print(f"Segment: {config.segment}")
+        print(f"Date folder: {config.date_folder}")
+        print(f"Work path: {work_path}")
         print(f"Old model path: {old_model_path}")
         print(f"New model path: {new_model_path}")
+        print(f"Old expert rules: {old_expert}")
+        print(f"New expert rules: {new_expert}")
         print(f"Output folder: {output_folder}")
+        print(f"VM Bench: {config.vm_bench} (type: {type(config.vm_bench).__name__})")
+        print(f"VM Dev: {config.vm_dev} (type: {type(config.vm_dev).__name__})")
+        print(f"================================")
+        
+        # Verify paths exist
+        if not os.path.exists(old_model_path):
+            raise FileNotFoundError(f"Old model not found: {old_model_path}")
+        if not os.path.exists(new_model_path):
+            raise FileNotFoundError(f"New model not found: {new_model_path}")
         
         runner = TestRunner(
             old_model_path,
@@ -407,8 +423,8 @@ def run_consumer_business_tests(run_id: str, config: ConsumerBusinessConfig):
                 new_expert_rules_zip_path=new_expert,
                 ServicePrincipal_CertificateThumbprint=CERT_THUMBPRINT,
                 ServicePrincipal_ApplicationId=APP_ID,
-                vm_for_bench=config.vm_bench,
-                vm_for_dev=config.vm_dev
+                vm_for_bench=int(config.vm_bench),
+                vm_for_dev=int(config.vm_dev)
             )
         
         # Anomalies tests
@@ -427,8 +443,8 @@ def run_consumer_business_tests(run_id: str, config: ConsumerBusinessConfig):
                 new_expert_rules_zip_path=new_expert,
                 ServicePrincipal_CertificateThumbprint=CERT_THUMBPRINT,
                 ServicePrincipal_ApplicationId=APP_ID,
-                vm_for_bench=config.vm_bench,
-                vm_for_dev=config.vm_dev
+                vm_for_bench=int(config.vm_bench),
+                vm_for_dev=int(config.vm_dev)
             )
         
         # Precision tests
@@ -447,8 +463,8 @@ def run_consumer_business_tests(run_id: str, config: ConsumerBusinessConfig):
                 new_expert_rules_zip_path=new_expert,
                 ServicePrincipal_CertificateThumbprint=CERT_THUMBPRINT,
                 ServicePrincipal_ApplicationId=APP_ID,
-                vm_for_bench=config.vm_bench,
-                vm_for_dev=config.vm_dev
+                vm_for_bench=int(config.vm_bench),
+                vm_for_dev=int(config.vm_dev)
             )
         
         # Stability tests
@@ -467,8 +483,8 @@ def run_consumer_business_tests(run_id: str, config: ConsumerBusinessConfig):
                 new_expert_rules_zip_path=new_expert,
                 ServicePrincipal_CertificateThumbprint=CERT_THUMBPRINT,
                 ServicePrincipal_ApplicationId=APP_ID,
-                vm_for_bench=config.vm_bench,
-                vm_for_dev=config.vm_dev
+                vm_for_bench=int(config.vm_bench),
+                vm_for_dev=int(config.vm_dev)
             )
         
         # Save reports
@@ -541,8 +557,8 @@ def run_tagger_tests(run_id: str, config: TaggerConfig):
             path_list_companies=company_list_path,
             ServicePrincipal_CertificateThumbprint=CERT_THUMBPRINT,
             ServicePrincipal_ApplicationId=APP_ID,
-            vm_for_bench=config.vm_bench,
-            vm_for_dev=config.vm_dev
+            vm_for_bench=int(config.vm_bench),
+            vm_for_dev=int(config.vm_dev)
         )
         
         # Save reports
