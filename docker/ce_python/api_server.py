@@ -122,7 +122,34 @@ def _safe_remove(p):
     return _real_os_remove(fixed)
 os.remove = _safe_remove
 
-print("[PATCH] Global path normalization patches applied (backslash -> forward slash, path remapping, shutil)")
+# Patch subprocess.Popen to intercept Windows PowerShell commands (Azure Batch)
+# The library tries to launch pwsh.exe which doesn't exist on Linux.
+# We simulate a successful no-op process instead.
+import subprocess
+_real_popen = subprocess.Popen
+
+class _FakePopen:
+    """Simulates a completed process for intercepted Windows commands."""
+    def __init__(self, *a, **kw):
+        self.returncode = 0
+        self.pid = 0
+    def communicate(self, *a, **kw):
+        return (b"", b"")
+    def wait(self, *a, **kw):
+        return 0
+    def poll(self):
+        return 0
+
+def _patched_popen(cmd, *args, **kwargs):
+    cmd_str = cmd if isinstance(cmd, str) else " ".join(str(c) for c in cmd)
+    if "pwsh.exe" in cmd_str or "powershell" in cmd_str.lower():
+        print(f"[PATCH] subprocess.Popen intercepted Windows PowerShell command, returning fake process: {cmd_str[:120]}...")
+        return _FakePopen()
+    return _real_popen(cmd, *args, **kwargs)
+
+subprocess.Popen = _patched_popen
+
+print("[PATCH] Global path normalization patches applied (backslash -> forward slash, path remapping, shutil, subprocess)")
 
 # Patch __init__ of MetricTrainTest and MetricValidationTestScore
 # These classes parse model folder names using path.split('\\'), so we must
