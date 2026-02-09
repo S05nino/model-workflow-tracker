@@ -53,6 +53,7 @@ interface TestRun {
   status: "pending" | "running" | "completed" | "failed";
   progress?: number;
   message?: string;
+  error_traceback?: string;
   result?: {
     output_folder?: string;
     report_path?: string;
@@ -592,6 +593,14 @@ export const TestSuiteSection = () => {
               <p className="text-xs text-muted-foreground">
                 Output: <code className="bg-muted px-1 py-0.5 rounded">{currentRun.result.output_folder}</code>
               </p>
+            )}
+            {currentRun.status === "failed" && currentRun.error_traceback && (
+              <details className="mt-2">
+                <summary className="text-xs text-destructive cursor-pointer">Mostra traceback completo</summary>
+                <pre className="mt-2 p-3 bg-muted rounded-md text-xs overflow-auto max-h-60 whitespace-pre-wrap">
+                  {currentRun.error_traceback}
+                </pre>
+              </details>
             )}
           </CardContent>
         </Card>
