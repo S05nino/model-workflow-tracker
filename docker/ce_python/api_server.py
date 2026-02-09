@@ -22,48 +22,61 @@ sys.path.insert(0, CE_PYTHON_PATH)
 sys.path.insert(0, CE_TESTS_PATH)
 
 # --- Monkey-patch: fix Windows-only path parsing in MetricTrainTest ---
-# The library uses path.split('\\') to extract the model folder name (line ~68-69),
-# which fails on Linux/Docker where paths use '/'. The split returns the full path
-# as a single element, so _model_name_params[3] gets 'cs-CZ' instead of '1'.
-# We temporarily inject backslashes so parsing works, then restore Linux paths.
+# The library uses path.split('\\') to extract the model folder name,
+# which fails on Linux/Docker. Instead of converting all paths to backslash
+# (which breaks every file I/O call), we patch os.path and builtins so that
+# ALL path operations transparently convert backslashes to forward slashes.
+import builtins
+
 try:
     from suite_tests import MetricTrainTest as _MTT
     _orig_MTT_init = _MTT.MetricTrainTest.__init__
 
     def _patched_MTT_init(self, old_model_path, new_model_path, output_folder, *args, **kwargs):
-        # Convert to backslash paths so split('\\') works inside __init__
+        # Convert to backslash so the library's split('\\') parsing works
         old_bs = old_model_path.replace('/', '\\') if old_model_path else old_model_path
         new_bs = new_model_path.replace('/', '\\') if new_model_path else new_model_path
         out_bs = output_folder.replace('/', '\\') if output_folder else output_folder
-        
-        # Temporarily patch os.chdir to convert backslashes back to forward slashes
+
+        # Helper: normalize any path string from backslash to forward slash
+        def _fix(p):
+            return p.replace('\\', '/') if isinstance(p, str) else p
+
+        # Save originals
         _real_chdir = os.chdir
-        def _linux_chdir(path):
-            return _real_chdir(path.replace('\\', '/'))
-        os.chdir = _linux_chdir
-        
-        # Also patch os.path.isdir, os.listdir, open, etc. via a general path fixer
         _real_isdir = os.path.isdir
         _real_exists = os.path.exists
+        _real_isfile = os.path.isfile
         _real_listdir = os.listdir
         _real_makedirs = os.makedirs
-        os.path.isdir = lambda p: _real_isdir(p.replace('\\', '/'))
-        os.path.exists = lambda p: _real_exists(p.replace('\\', '/'))
-        os.listdir = lambda p: _real_listdir(p.replace('\\', '/'))
-        os.makedirs = lambda p, **kw: _real_makedirs(p.replace('\\', '/'), **kw)
-        
+        _real_join = os.path.join
+        _real_open = builtins.open
+
+        # Patch all os/path functions to normalize backslashes
+        os.chdir = lambda p: _real_chdir(_fix(p))
+        os.path.isdir = lambda p: _real_isdir(_fix(p))
+        os.path.exists = lambda p: _real_exists(_fix(p))
+        os.path.isfile = lambda p: _real_isfile(_fix(p))
+        os.listdir = lambda p: _real_listdir(_fix(p))
+        os.makedirs = lambda p, **kw: _real_makedirs(_fix(p), **kw)
+        os.path.join = lambda *parts: _real_join(*[_fix(p) for p in parts])
+        builtins.open = lambda f, *a, **kw: _real_open(_fix(f), *a, **kw)
+
         print(f"[PATCH] Calling MetricTrainTest with backslash paths for parsing")
         try:
             _orig_MTT_init(self, old_bs, new_bs, out_bs, *args, **kwargs)
         finally:
-            # Restore original os functions
+            # Restore ALL original functions
             os.chdir = _real_chdir
             os.path.isdir = _real_isdir
             os.path.exists = _real_exists
+            os.path.isfile = _real_isfile
             os.listdir = _real_listdir
             os.makedirs = _real_makedirs
-        
-        # Restore Linux-compatible paths for subsequent operations
+            os.path.join = _real_join
+            builtins.open = _real_open
+
+        # Restore Linux-compatible paths on the instance
         self.old_model_path = old_model_path
         self.new_model_path = new_model_path
         self.output_folder = output_folder
