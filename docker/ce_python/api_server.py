@@ -48,7 +48,13 @@ def _fix(p):
     return p
 
 builtins.open = lambda f, *a, **kw: _real_open(_fix(f), *a, **kw)
-os.listdir = lambda p='.': _real_listdir(_fix(p))
+def _safe_listdir(p='.'):
+    """listdir that returns [] if path doesn't exist (for Azure VM dirs)."""
+    fixed = _fix(p)
+    if not _real_exists(fixed):
+        return []
+    return _real_listdir(fixed)
+os.listdir = _safe_listdir
 os.path.isdir = lambda p: _real_isdir(_fix(p))
 os.path.isfile = lambda p: _real_isfile(_fix(p))
 os.path.exists = lambda p: _real_exists(_fix(p))
