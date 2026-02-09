@@ -105,11 +105,12 @@ app.add_middleware(
 # Data path for test suite files (mounted volume)
 DATA_ROOT = os.environ.get("TEST_SUITE_DATA_PATH", "/data/TEST_SUITE")
 
-# Azure Batch settings (can be overridden via environment)
-AZURE_BATCH_VM_PATH = os.environ.get(
-    "AZURE_BATCH_VM_PATH",
-    r"C:\Users\kq5simmarine\AppData\Local\Categorization.Classifier.NoJWT\Utils\Categorization.Classifier.Batch.AzureDataScience"
-)
+# Azure Batch settings - override Windows path with a local Linux path inside the container
+_AZURE_BATCH_LOCAL = "/tmp/azure_batch"
+os.makedirs(_AZURE_BATCH_LOCAL, exist_ok=True)
+# Force the env var so the library picks up the Linux path
+os.environ["AZURE_BATCH_VM_PATH"] = _AZURE_BATCH_LOCAL
+AZURE_BATCH_VM_PATH = _AZURE_BATCH_LOCAL
 CERT_THUMBPRINT = os.environ.get("CERT_THUMBPRINT", "D0E4EB9FB0506DEF78ECF1283319760E980C1736")
 APP_ID = os.environ.get("APP_ID", "5fd0a365-b1c7-48c4-ba16-bdc211ddad84")
 
