@@ -11,8 +11,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the API server
+# Copy the API server and S3 helper
 COPY api_server.py .
+COPY s3_helper.py .
 
 # The CategorizationEnginePython folder will be mounted as a volume
 # This allows users to add their own code without rebuilding
