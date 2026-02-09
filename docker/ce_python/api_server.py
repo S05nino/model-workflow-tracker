@@ -359,8 +359,19 @@ def run_consumer_business_tests(run_id: str, config: ConsumerBusinessConfig):
                 new_expert = os.path.join(expert_path, config.new_expert_rules)
         
         test_runs[run_id]["message"] = "Creating TestRunner instance..."
+        # Debug: show exactly how the model name gets parsed
+        old_basename = os.path.basename(old_model_path).replace('.zip', '')
+        new_basename = os.path.basename(new_model_path).replace('.zip', '')
+        old_parts = old_basename.split('_')
+        new_parts = new_basename.split('_')
         print(f"[DEBUG] old_model_path: {old_model_path}")
         print(f"[DEBUG] new_model_path: {new_model_path}")
+        print(f"[DEBUG] old_basename: {old_basename}")
+        print(f"[DEBUG] old_parts: {old_parts}")
+        print(f"[DEBUG] old_parts[3] if exists: {old_parts[3] if len(old_parts) > 3 else 'N/A'}")
+        print(f"[DEBUG] new_basename: {new_basename}")
+        print(f"[DEBUG] new_parts: {new_parts}")
+        print(f"[DEBUG] new_parts[3] if exists: {new_parts[3] if len(new_parts) > 3 else 'N/A'}")
         print(f"[DEBUG] output_folder: {output_folder}")
         print(f"[DEBUG] old_expert: {old_expert}")
         print(f"[DEBUG] new_expert: {new_expert}")
