@@ -21,73 +21,86 @@ CE_TESTS_PATH = os.path.join(CE_PYTHON_PATH, "CategorizationEngineTests", "CETes
 sys.path.insert(0, CE_PYTHON_PATH)
 sys.path.insert(0, CE_TESTS_PATH)
 
-# --- Monkey-patch: fix Windows-only path parsing in multiple library classes ---
-# Classes like MetricTrainTest and MetricValidationTestScore use path.split('\\')
-# to extract model folder names, which fails on Linux/Docker.
-# We patch all such classes with a generic wrapper.
+# --- GLOBAL monkey-patch: fix Windows backslash paths for Linux/Docker ---
+# The Python library uses backslash paths everywhere (init, compute, etc.).
+# Instead of patching individual __init__ methods, we permanently patch all
+# path-related OS functions to normalize backslashes to forward slashes.
+# This is safe because this container ONLY runs the test library.
 import builtins
 
+_real_open = builtins.open
+_real_listdir = os.listdir
+_real_isdir = os.path.isdir
+_real_isfile = os.path.isfile
+_real_exists = os.path.exists
+_real_makedirs = os.makedirs
+_real_chdir = os.chdir
+_real_join = os.path.join
+_real_abspath = os.path.abspath
+_real_basename = os.path.basename
+_real_dirname = os.path.dirname
+_real_glob = glob.glob
+
+def _fix(p):
+    """Normalize Windows backslash paths to forward slashes for Linux."""
+    if isinstance(p, str):
+        return p.replace('\\', '/')
+    return p
+
+builtins.open = lambda f, *a, **kw: _real_open(_fix(f), *a, **kw)
+os.listdir = lambda p='.': _real_listdir(_fix(p))
+os.path.isdir = lambda p: _real_isdir(_fix(p))
+os.path.isfile = lambda p: _real_isfile(_fix(p))
+os.path.exists = lambda p: _real_exists(_fix(p))
+os.makedirs = lambda p, *a, **kw: _real_makedirs(_fix(p), *a, **kw)
+os.chdir = lambda p: _real_chdir(_fix(p))
+os.path.join = lambda *parts: _real_join(*[_fix(p) for p in parts])
+os.path.abspath = lambda p: _real_abspath(_fix(p))
+os.path.basename = lambda p: _real_basename(_fix(p))
+os.path.dirname = lambda p: _real_dirname(_fix(p))
+glob.glob = lambda p, **kw: _real_glob(_fix(p), **kw)
+
+print("[PATCH] Global path normalization patches applied (backslash -> forward slash)")
+
+# Patch __init__ of MetricTrainTest and MetricValidationTestScore
+# These classes parse model folder names using path.split('\\'), so we must
+# feed them backslash paths, then restore Linux paths on the instance after init.
 def _make_patched_init(orig_init, class_name):
-    """Create a patched __init__ that converts paths to backslash for parsing,
-    while patching all I/O functions to normalize back to forward slash."""
+    """Feeds backslash paths to __init__ for split('\\') parsing, then restores Linux paths."""
     def _patched_init(self, old_model_path, new_model_path, output_folder, *args, **kwargs):
         old_bs = old_model_path.replace('/', '\\') if old_model_path else old_model_path
         new_bs = new_model_path.replace('/', '\\') if new_model_path else new_model_path
         out_bs = output_folder.replace('/', '\\') if output_folder else output_folder
-
-        def _fix(p):
-            return p.replace('\\', '/') if isinstance(p, str) else p
-
-        _real_chdir = os.chdir
-        _real_isdir = os.path.isdir
-        _real_exists = os.path.exists
-        _real_isfile = os.path.isfile
-        _real_listdir = os.listdir
-        _real_makedirs = os.makedirs
-        _real_join = os.path.join
-        _real_open = builtins.open
-
-        os.chdir = lambda p: _real_chdir(_fix(p))
-        os.path.isdir = lambda p: _real_isdir(_fix(p))
-        os.path.exists = lambda p: _real_exists(_fix(p))
-        os.path.isfile = lambda p: _real_isfile(_fix(p))
-        os.listdir = lambda p: _real_listdir(_fix(p))
-        os.makedirs = lambda p, **kw: _real_makedirs(_fix(p), **kw)
-        os.path.join = lambda *parts: _real_join(*[_fix(p) for p in parts])
-        builtins.open = lambda f, *a, **kw: _real_open(_fix(f), *a, **kw)
-
-        print(f"[PATCH] Calling {class_name} with backslash paths for parsing")
-        try:
-            orig_init(self, old_bs, new_bs, out_bs, *args, **kwargs)
-        finally:
-            os.chdir = _real_chdir
-            os.path.isdir = _real_isdir
-            os.path.exists = _real_exists
-            os.path.isfile = _real_isfile
-            os.listdir = _real_listdir
-            os.makedirs = _real_makedirs
-            os.path.join = _real_join
-            builtins.open = _real_open
-
+        print(f"[PATCH] {class_name}.__init__ called with backslash paths for parsing")
+        orig_init(self, old_bs, new_bs, out_bs, *args, **kwargs)
+        # Restore Linux paths on instance attributes
         self.old_model_path = old_model_path
         self.new_model_path = new_model_path
         self.output_folder = output_folder
-        print(f"[PATCH] {class_name} init complete, Linux paths restored")
+        # Also fix any other path attributes that might have been set with backslashes
+        for attr in dir(self):
+            if attr.startswith('_'):
+                continue
+            try:
+                val = getattr(self, attr)
+                if isinstance(val, str) and '\\' in val:
+                    setattr(self, attr, val.replace('\\', '/'))
+            except Exception:
+                pass
+        print(f"[PATCH] {class_name}.__init__ complete, instance paths normalized")
     return _patched_init
 
-# Patch MetricTrainTest
 try:
     from suite_tests import MetricTrainTest as _MTT
     _MTT.MetricTrainTest.__init__ = _make_patched_init(_MTT.MetricTrainTest.__init__, "MetricTrainTest")
-    print("[PATCH] MetricTrainTest.__init__ patched for Linux path compatibility")
+    print("[PATCH] MetricTrainTest.__init__ patched")
 except Exception as e:
     print(f"[PATCH] Warning: Could not patch MetricTrainTest: {e}")
 
-# Patch MetricValidationTestScore
 try:
     from suite_tests import MetricValidationTestScore as _MVTS
     _MVTS.MetricValidationTestScore.__init__ = _make_patched_init(_MVTS.MetricValidationTestScore.__init__, "MetricValidationTestScore")
-    print("[PATCH] MetricValidationTestScore.__init__ patched for Linux path compatibility")
+    print("[PATCH] MetricValidationTestScore.__init__ patched")
 except Exception as e:
     print(f"[PATCH] Warning: Could not patch MetricValidationTestScore: {e}")
 
