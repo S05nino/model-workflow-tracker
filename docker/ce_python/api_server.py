@@ -84,6 +84,7 @@ class TestStatusResponse(BaseModel):
     progress: Optional[int] = None
     message: Optional[str] = None
     result: Optional[dict] = None
+    error_traceback: Optional[str] = None
 
 
 @app.get("/health")
@@ -358,6 +359,13 @@ def run_consumer_business_tests(run_id: str, config: ConsumerBusinessConfig):
                 new_expert = os.path.join(expert_path, config.new_expert_rules)
         
         test_runs[run_id]["message"] = "Creating TestRunner instance..."
+        print(f"[DEBUG] old_model_path: {old_model_path}")
+        print(f"[DEBUG] new_model_path: {new_model_path}")
+        print(f"[DEBUG] output_folder: {output_folder}")
+        print(f"[DEBUG] old_expert: {old_expert}")
+        print(f"[DEBUG] new_expert: {new_expert}")
+        print(f"[DEBUG] old_model exists: {os.path.exists(old_model_path)}")
+        print(f"[DEBUG] new_model exists: {os.path.exists(new_model_path)}")
         
         runner = TestRunner(
             old_model_path,
@@ -605,7 +613,8 @@ def get_test_status(run_id: str):
         status=run.get("status", "unknown"),
         progress=run.get("progress"),
         message=run.get("message"),
-        result=run.get("result")
+        result=run.get("result"),
+        error_traceback=run.get("error")
     )
 
 
