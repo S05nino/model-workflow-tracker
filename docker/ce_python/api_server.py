@@ -13,6 +13,7 @@ import json
 import datetime
 import traceback
 import glob
+import shutil
 
 # Add the CategorizationEnginePython paths
 CE_PYTHON_PATH = "/app/CategorizationEnginePython"
@@ -40,11 +41,27 @@ _real_abspath = os.path.abspath
 _real_basename = os.path.basename
 _real_dirname = os.path.dirname
 _real_glob = glob.glob
+_real_shutil_copy = shutil.copy
+_real_shutil_copy2 = shutil.copy2
+_real_shutil_move = shutil.move
+_real_os_remove = os.remove
+
+# Path remapping: the library references C:/_git/CategorizationEnginePython
+# which must be redirected to the Docker mount at /app/CategorizationEnginePython
+_PATH_REMAPS = [
+    ("C:/_git/CategorizationEnginePython", "/app/CategorizationEnginePython"),
+    ("C:\\_git\\CategorizationEnginePython", "/app/CategorizationEnginePython"),
+]
 
 def _fix(p):
-    """Normalize Windows backslash paths to forward slashes for Linux."""
+    """Normalize Windows backslash paths to forward slashes and remap known paths."""
     if isinstance(p, str):
-        return p.replace('\\', '/')
+        p = p.replace('\\', '/')
+        for old_prefix, new_prefix in _PATH_REMAPS:
+            normalized_old = old_prefix.replace('\\', '/')
+            if p.startswith(normalized_old):
+                p = new_prefix + p[len(normalized_old):]
+                break
     return p
 
 builtins.open = lambda f, *a, **kw: _real_open(_fix(f), *a, **kw)
@@ -52,6 +69,7 @@ def _safe_listdir(p='.'):
     """listdir that returns [] if path doesn't exist (for Azure VM dirs)."""
     fixed = _fix(p)
     if not _real_exists(fixed):
+        _real_makedirs(fixed, exist_ok=True)
         return []
     return _real_listdir(fixed)
 os.listdir = _safe_listdir
@@ -66,7 +84,42 @@ os.path.basename = lambda p: _real_basename(_fix(p))
 os.path.dirname = lambda p: _real_dirname(_fix(p))
 glob.glob = lambda p, **kw: _real_glob(_fix(p), **kw)
 
-print("[PATCH] Global path normalization patches applied (backslash -> forward slash)")
+# Patch shutil to normalize paths
+def _safe_shutil_copy(src, dst, *a, **kw):
+    s, d = _fix(src), _fix(dst)
+    _real_makedirs(_real_dirname(d) if _real_dirname(d) else '.', exist_ok=True)
+    if not _real_exists(s):
+        print(f"[PATCH] shutil.copy: source not found, skipping: {s}")
+        return d
+    return _real_shutil_copy(s, d, *a, **kw)
+shutil.copy = _safe_shutil_copy
+
+def _safe_shutil_copy2(src, dst, *a, **kw):
+    s, d = _fix(src), _fix(dst)
+    _real_makedirs(_real_dirname(d) if _real_dirname(d) else '.', exist_ok=True)
+    if not _real_exists(s):
+        print(f"[PATCH] shutil.copy2: source not found, skipping: {s}")
+        return d
+    return _real_shutil_copy2(s, d, *a, **kw)
+shutil.copy2 = _safe_shutil_copy2
+
+def _safe_shutil_move(src, dst, *a, **kw):
+    s, d = _fix(src), _fix(dst)
+    _real_makedirs(_real_dirname(d) if _real_dirname(d) else '.', exist_ok=True)
+    if not _real_exists(s):
+        print(f"[PATCH] shutil.move: source not found, skipping: {s}")
+        return d
+    return _real_shutil_move(s, d, *a, **kw)
+shutil.move = _safe_shutil_move
+
+def _safe_remove(p):
+    fixed = _fix(p)
+    if not _real_exists(fixed):
+        return
+    return _real_os_remove(fixed)
+os.remove = _safe_remove
+
+print("[PATCH] Global path normalization patches applied (backslash -> forward slash, path remapping, shutil)")
 
 # Patch __init__ of MetricTrainTest and MetricValidationTestScore
 # These classes parse model folder names using path.split('\\'), so we must
@@ -127,6 +180,9 @@ DATA_ROOT = os.environ.get("TEST_SUITE_DATA_PATH", "/data/TEST_SUITE")
 # Azure Batch settings - override Windows path with a local Linux path inside the container
 _AZURE_BATCH_LOCAL = "/tmp/azure_batch"
 os.makedirs(_AZURE_BATCH_LOCAL, exist_ok=True)
+# Pre-create VM working folders so listdir/copy don't fail
+for _vm_i in range(1, 11):
+    _real_makedirs(f"{_AZURE_BATCH_LOCAL}/WorkingFolder_FileShare_Uic-P3t-VM-{_vm_i}", exist_ok=True)
 # Force the env var so the library picks up the Linux path
 os.environ["AZURE_BATCH_VM_PATH"] = _AZURE_BATCH_LOCAL
 AZURE_BATCH_VM_PATH = _AZURE_BATCH_LOCAL
