@@ -21,6 +21,59 @@ CE_TESTS_PATH = os.path.join(CE_PYTHON_PATH, "CategorizationEngineTests", "CETes
 sys.path.insert(0, CE_PYTHON_PATH)
 sys.path.insert(0, CE_TESTS_PATH)
 
+# --- Monkey-patch: fix Windows-only path parsing in MetricTrainTest ---
+# The library uses path.split('\\') to extract the model folder name (line ~68-69),
+# which fails on Linux/Docker where paths use '/'. The split returns the full path
+# as a single element, so _model_name_params[3] gets 'cs-CZ' instead of '1'.
+# We temporarily inject backslashes so parsing works, then restore Linux paths.
+try:
+    from suite_tests import MetricTrainTest as _MTT
+    _orig_MTT_init = _MTT.MetricTrainTest.__init__
+
+    def _patched_MTT_init(self, old_model_path, new_model_path, output_folder, *args, **kwargs):
+        # Convert to backslash paths so split('\\') works inside __init__
+        old_bs = old_model_path.replace('/', '\\') if old_model_path else old_model_path
+        new_bs = new_model_path.replace('/', '\\') if new_model_path else new_model_path
+        out_bs = output_folder.replace('/', '\\') if output_folder else output_folder
+        
+        # Temporarily patch os.chdir to convert backslashes back to forward slashes
+        _real_chdir = os.chdir
+        def _linux_chdir(path):
+            return _real_chdir(path.replace('\\', '/'))
+        os.chdir = _linux_chdir
+        
+        # Also patch os.path.isdir, os.listdir, open, etc. via a general path fixer
+        _real_isdir = os.path.isdir
+        _real_exists = os.path.exists
+        _real_listdir = os.listdir
+        _real_makedirs = os.makedirs
+        os.path.isdir = lambda p: _real_isdir(p.replace('\\', '/'))
+        os.path.exists = lambda p: _real_exists(p.replace('\\', '/'))
+        os.listdir = lambda p: _real_listdir(p.replace('\\', '/'))
+        os.makedirs = lambda p, **kw: _real_makedirs(p.replace('\\', '/'), **kw)
+        
+        print(f"[PATCH] Calling MetricTrainTest with backslash paths for parsing")
+        try:
+            _orig_MTT_init(self, old_bs, new_bs, out_bs, *args, **kwargs)
+        finally:
+            # Restore original os functions
+            os.chdir = _real_chdir
+            os.path.isdir = _real_isdir
+            os.path.exists = _real_exists
+            os.listdir = _real_listdir
+            os.makedirs = _real_makedirs
+        
+        # Restore Linux-compatible paths for subsequent operations
+        self.old_model_path = old_model_path
+        self.new_model_path = new_model_path
+        self.output_folder = output_folder
+        print(f"[PATCH] Init complete, Linux paths restored")
+
+    _MTT.MetricTrainTest.__init__ = _patched_MTT_init
+    print("[PATCH] MetricTrainTest.__init__ patched for Linux path compatibility")
+except Exception as e:
+    print(f"[PATCH] Warning: Could not patch MetricTrainTest: {e}")
+
 app = FastAPI(title="CE Test Suite API", version="1.0.0")
 
 # CORS middleware
@@ -359,24 +412,9 @@ def run_consumer_business_tests(run_id: str, config: ConsumerBusinessConfig):
                 new_expert = os.path.join(expert_path, config.new_expert_rules)
         
         test_runs[run_id]["message"] = "Creating TestRunner instance..."
-        # Debug: show exactly how the model name gets parsed
-        old_basename = os.path.basename(old_model_path).replace('.zip', '')
-        new_basename = os.path.basename(new_model_path).replace('.zip', '')
-        old_parts = old_basename.split('_')
-        new_parts = new_basename.split('_')
         print(f"[DEBUG] old_model_path: {old_model_path}")
         print(f"[DEBUG] new_model_path: {new_model_path}")
-        print(f"[DEBUG] old_basename: {old_basename}")
-        print(f"[DEBUG] old_parts: {old_parts}")
-        print(f"[DEBUG] old_parts[3] if exists: {old_parts[3] if len(old_parts) > 3 else 'N/A'}")
-        print(f"[DEBUG] new_basename: {new_basename}")
-        print(f"[DEBUG] new_parts: {new_parts}")
-        print(f"[DEBUG] new_parts[3] if exists: {new_parts[3] if len(new_parts) > 3 else 'N/A'}")
         print(f"[DEBUG] output_folder: {output_folder}")
-        print(f"[DEBUG] old_expert: {old_expert}")
-        print(f"[DEBUG] new_expert: {new_expert}")
-        print(f"[DEBUG] old_model exists: {os.path.exists(old_model_path)}")
-        print(f"[DEBUG] new_model exists: {os.path.exists(new_model_path)}")
         
         runner = TestRunner(
             old_model_path,
