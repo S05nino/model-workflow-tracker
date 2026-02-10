@@ -12,9 +12,8 @@ RUN npm install
 # Copy source code
 COPY . .
 
-# Build the app with local backend URLs
+# Build the app with local backend URL
 ENV VITE_API_URL=http://localhost:3001/api
-ENV VITE_PYTHON_API_URL=http://localhost:3002
 RUN npm run build
 
 # Production stage with nginx
