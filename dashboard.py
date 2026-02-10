@@ -6,14 +6,13 @@ import datetime
 import shutil
 import glob
 
-# --- PATH ---
-root_folder = os.environ.get("TEST_SUITE_ROOT", r"\\sassrv04\DA_WWCC1\1_Global_Analytics_Consultancy\R1_2\PRODUCT\CE\01_Data\TEST_SUITE")
+# --- PATH FISSO ---
+root_folder = r"\\sassrv04\DA_WWCC1\1_Global_Analytics_Consultancy\R1_2\PRODUCT\CE\01_Data\TEST_SUITE"
 st.sidebar.info(f"Root folder: {root_folder}")
 
 # Import TestRunner
-ce_python_path = os.environ.get("CE_PYTHON_PATH", r"C:\_git\CategorizationEnginePython")
-sys.path.append(ce_python_path)
-sys.path.append(os.path.join(ce_python_path, "CategorizationEngineTests", "CETestSuite"))
+sys.path.append(r"C:\_git\CategorizationEnginePython")
+sys.path.append(r"C:\_git\CategorizationEnginePython\CategorizationEngineTests\CETestSuite")
 from suite_tests.testRunner import TestRunner
 from suite_tests.testRunner_tagger import TestRunner as TestRunnerTagger
 
