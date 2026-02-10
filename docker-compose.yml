@@ -25,6 +25,20 @@ services:
     networks:
       - ml-workflow
 
+  streamlit:
+    build:
+      context: .
+      dockerfile: docker/streamlit/Dockerfile
+    ports:
+      - "8501:8501"
+    volumes:
+      # Mount TEST_SUITE data
+      - ./data/TEST_SUITE:/data/TEST_SUITE
+      # Mount CategorizationEnginePython code
+      - ./docker/ce_python/CategorizationEnginePython:/app/CategorizationEnginePython
+    networks:
+      - ml-workflow
+
 networks:
   ml-workflow:
     driver: bridge
