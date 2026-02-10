@@ -31,11 +31,14 @@ services:
       dockerfile: docker/streamlit/Dockerfile
     ports:
       - "8501:8501"
+    environment:
+      - CE_PYTHON_PATH=/app/CategorizationEnginePython
+      - TEST_SUITE_ROOT=/data/TEST_SUITE
     volumes:
       # Mount TEST_SUITE data
       - ./data/TEST_SUITE:/data/TEST_SUITE
-      # Mount CategorizationEnginePython code
-      - ./docker/ce_python/CategorizationEnginePython:/app/CategorizationEnginePython
+      # Mount CategorizationEnginePython code (local path on host)
+      - C:\_git\CategorizationEnginePython:/app/CategorizationEnginePython
     networks:
       - ml-workflow
 
