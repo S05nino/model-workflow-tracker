@@ -28,6 +28,7 @@ sys.path.insert(0, CE_TESTS_PATH)
 # path-related OS functions to normalize backslashes to forward slashes.
 # This is safe because this container ONLY runs the test library.
 import builtins
+import subprocess as _subprocess_module
 
 _real_open = builtins.open
 _real_listdir = os.listdir
@@ -119,6 +120,73 @@ def _safe_remove(p):
     return _real_os_remove(fixed)
 os.remove = _safe_remove
 
+
+# --- Patch subprocess.Popen to intercept PowerShell / sign_model calls ---
+_real_Popen = _subprocess_module.Popen
+
+class _FakePopen:
+    """Fake Popen that simulates successful execution for Windows-only commands."""
+    def __init__(self, *a, **kw):
+        self.returncode = 0
+        self.pid = 0
+    def communicate(self, *a, **kw):
+        return (b"", b"")
+    def wait(self, *a, **kw):
+        return 0
+    def poll(self):
+        return 0
+    def kill(self):
+        pass
+    def terminate(self):
+        pass
+
+def _patched_Popen(args, *a, **kw):
+    """Intercept Popen calls for pwsh.exe, powershell, ComponentSigner, etc."""
+    cmd_str = args if isinstance(args, str) else " ".join(str(x) for x in args)
+    cmd_lower = cmd_str.lower().replace('\\', '/')
+    if any(token in cmd_lower for token in ['pwsh.exe', 'powershell', 'componentsigner', 'c:/program files']):
+        print(f"[PATCH] Popen intercepted and skipped: {cmd_str[:120]}...")
+        return _FakePopen()
+    if isinstance(args, str):
+        args = _fix(args)
+    elif isinstance(args, (list, tuple)):
+        args = [_fix(str(x)) for x in args]
+    return _real_Popen(args, *a, **kw)
+
+_subprocess_module.Popen = _patched_Popen
+
+_real_subprocess_run = _subprocess_module.run
+_real_subprocess_call = _subprocess_module.call
+
+def _patched_subprocess_run(args, *a, **kw):
+    cmd_str = args if isinstance(args, str) else " ".join(str(x) for x in args)
+    cmd_lower = cmd_str.lower().replace('\\', '/')
+    if any(token in cmd_lower for token in ['pwsh.exe', 'powershell', 'componentsigner', 'c:/program files']):
+        print(f"[PATCH] subprocess.run intercepted and skipped: {cmd_str[:120]}...")
+        return _subprocess_module.CompletedProcess(args, 0, b"", b"")
+    return _real_subprocess_run(args, *a, **kw)
+
+def _patched_subprocess_call(args, *a, **kw):
+    cmd_str = args if isinstance(args, str) else " ".join(str(x) for x in args)
+    cmd_lower = cmd_str.lower().replace('\\', '/')
+    if any(token in cmd_lower for token in ['pwsh.exe', 'powershell', 'componentsigner', 'c:/program files']):
+        print(f"[PATCH] subprocess.call intercepted and skipped: {cmd_str[:120]}...")
+        return 0
+    return _real_subprocess_call(args, *a, **kw)
+
+_subprocess_module.run = _patched_subprocess_run
+_subprocess_module.call = _patched_subprocess_call
+
+_real_os_system = os.system
+def _patched_os_system(cmd):
+    cmd_lower = cmd.lower().replace('\\', '/')
+    if any(token in cmd_lower for token in ['componentsigner', 'c:/program files', 'pwsh', 'powershell']):
+        print(f"[PATCH] os.system intercepted and skipped: {cmd[:120]}...")
+        return 0
+    return _real_os_system(cmd)
+os.system = _patched_os_system
+
+print("[PATCH] subprocess.Popen/run/call and os.system patched for Windows commands")
 print("[PATCH] Global path normalization patches applied (backslash -> forward slash, path remapping, shutil)")
 
 # Patch __init__ of MetricTrainTest and MetricValidationTestScore
@@ -183,6 +251,8 @@ os.makedirs(_AZURE_BATCH_LOCAL, exist_ok=True)
 # Pre-create VM working folders so listdir/copy don't fail
 for _vm_i in range(1, 11):
     _real_makedirs(f"{_AZURE_BATCH_LOCAL}/WorkingFolder_FileShare_Uic-P3t-VM-{_vm_i}", exist_ok=True)
+# Pre-create PowershellScripts directory referenced by the library
+_real_makedirs(f"{_AZURE_BATCH_LOCAL}/PowershellScripts", exist_ok=True)
 # Force the env var so the library picks up the Linux path
 os.environ["AZURE_BATCH_VM_PATH"] = _AZURE_BATCH_LOCAL
 AZURE_BATCH_VM_PATH = _AZURE_BATCH_LOCAL
