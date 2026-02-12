@@ -197,9 +197,122 @@ app.post('/api/validate-password', (req, res) => {
   res.json({ valid: config.value === password });
 });
 
+// ===== Test Suite: Network Share Browsing =====
+const TESTSUITE_ROOT = process.env.TESTSUITE_ROOT || String.raw`\\sassrv04\DA_WWCC1\1_Global_Analytics_Consultancy\R1_2\PRODUCT\CE\01_Data\TEST_SUITE`;
+const CONFIG_DIR = process.env.TESTSUITE_CONFIG_DIR || path.join(__dirname, 'configs');
+
+// Ensure config dir exists
+if (!fs.existsSync(CONFIG_DIR)) {
+  fs.mkdirSync(CONFIG_DIR, { recursive: true });
+}
+
+// List directories and files under a relative path in the network share
+app.get('/api/testsuite/list', (req, res) => {
+  const relPath = req.query.path || '';
+  const fullPath = path.join(TESTSUITE_ROOT, relPath);
+
+  console.log(`[testsuite/list] path=${relPath} -> ${fullPath}`);
+
+  try {
+    if (!fs.existsSync(fullPath)) {
+      return res.json({ folders: [], files: [] });
+    }
+    const entries = fs.readdirSync(fullPath, { withFileTypes: true });
+    const folders = entries
+      .filter(e => e.isDirectory())
+      .map(e => ({ name: e.name, prefix: path.join(relPath, e.name).replace(/\\/g, '/') + '/' }));
+    const files = entries
+      .filter(e => e.isFile())
+      .map(e => {
+        const filePath = path.join(fullPath, e.name);
+        const stats = fs.statSync(filePath);
+        return {
+          name: e.name,
+          key: path.join(relPath, e.name).replace(/\\/g, '/'),
+          size: stats.size,
+          lastModified: stats.mtime.toISOString(),
+        };
+      });
+    res.json({ folders, files });
+  } catch (err) {
+    console.error('[testsuite/list] Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Save test config JSON locally
+app.post('/api/testsuite/config', (req, res) => {
+  const { filename, config } = req.body;
+  if (!filename || !config) {
+    return res.status(400).json({ error: 'Missing filename or config' });
+  }
+
+  const configPath = path.join(CONFIG_DIR, filename);
+  console.log(`[testsuite/config] Saving config: ${configPath}`);
+
+  try {
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+    res.json({ ok: true, path: configPath });
+  } catch (err) {
+    console.error('[testsuite/config] Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// List saved configs
+app.get('/api/testsuite/configs', (req, res) => {
+  try {
+    if (!fs.existsSync(CONFIG_DIR)) {
+      return res.json({ configs: [] });
+    }
+    const files = fs.readdirSync(CONFIG_DIR).filter(f => f.endsWith('.json'));
+    res.json({ configs: files });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Check output folder for results
+app.get('/api/testsuite/output', (req, res) => {
+  const relPath = req.query.path || '';
+  const fullPath = path.join(TESTSUITE_ROOT, relPath);
+
+  try {
+    if (!fs.existsSync(fullPath)) {
+      return res.json({ files: [] });
+    }
+    const entries = fs.readdirSync(fullPath, { withFileTypes: true });
+    const files = entries.filter(e => e.isFile()).map(e => {
+      const filePath = path.join(fullPath, e.name);
+      const stats = fs.statSync(filePath);
+      return {
+        name: e.name,
+        key: path.join(relPath, e.name).replace(/\\/g, '/'),
+        size: stats.size,
+        lastModified: stats.mtime.toISOString(),
+      };
+    });
+    res.json({ files });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Download a file from the network share
+app.get('/api/testsuite/download', (req, res) => {
+  const relPath = req.query.path || '';
+  const fullPath = path.join(TESTSUITE_ROOT, relPath);
+
+  if (!fs.existsSync(fullPath)) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+
+  res.download(fullPath);
+});
+
 // Health check
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', dataPath: DATA_PATH });
+  res.json({ status: 'ok', dataPath: DATA_PATH, testsuiteRoot: TESTSUITE_ROOT });
 });
 
 initializeData();
@@ -207,4 +320,5 @@ initializeData();
 app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
   console.log(`Data file location: ${path.resolve(DATA_PATH)}`);
+  console.log(`TestSuite root: ${TESTSUITE_ROOT}`);
 });
