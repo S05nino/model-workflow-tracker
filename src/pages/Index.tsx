@@ -14,8 +14,8 @@ import { exportDashboardReport } from '@/lib/exportReport';
 import { toast } from 'sonner';
 
 const Index = () => {
-  const { projects } = useProjects();
-  const { releases } = useReleases();
+  const { projects, addProject } = useProjects();
+  const { releases, addRelease } = useReleases();
   const { countries, addCountry, removeCountry } = useCountries();
 
   return (
@@ -63,28 +63,23 @@ const Index = () => {
         {/* Dashboard Stats */}
         <DashboardStats projects={projects} />
 
-        {/* Control Bar */}
-        <div className="flex items-center justify-between mt-6 animate-fade-in" style={{ animationDelay: '0.15s' }}>
-          <Tabs defaultValue="releases" className="w-auto">
+        {/* Single Tabs wrapper */}
+        <Tabs defaultValue="releases" className="animate-fade-in mt-6" style={{ animationDelay: '0.1s' }}>
+          <div className="flex items-center justify-between mb-4">
             <TabsList>
               <TabsTrigger value="releases">Rilasci</TabsTrigger>
               <TabsTrigger value="testsuite">TestSuite</TabsTrigger>
             </TabsList>
-          </Tabs>
-          <div className="flex gap-2">
-            <NewProjectDialog onAdd={(country, segment, testType) => {
-              const { addProject } = useProjects();
-              addProject(country, segment, testType);
-            }} countries={countries} />
-            <NewReleaseDialog onAdd={(version, targetDate, models) => {
-              const { addRelease } = useReleases();
-              addRelease(version, targetDate, models);
-            }} countries={countries} />
+            <div className="flex gap-2">
+              <NewProjectDialog onAdd={(country, segment, testType) => {
+                addProject(country, segment, testType);
+              }} countries={countries} />
+              <NewReleaseDialog onAdd={(version, targetDate, models) => {
+                addRelease(version, targetDate, models);
+              }} countries={countries} />
+            </div>
           </div>
-        </div>
 
-        {/* Tabs Content */}
-        <Tabs defaultValue="releases" className="animate-fade-in" style={{ animationDelay: '0.1s' }}>
           <TabsContent value="releases">
             <ReleasesSection />
           </TabsContent>
