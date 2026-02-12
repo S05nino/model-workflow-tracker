@@ -1,11 +1,7 @@
 import { useState } from 'react';
 import { useReleasesAdapter as useReleases, useCountriesAdapter as useCountries, useProjectsAdapter as useProjects } from '@/hooks/adapters';
 import { ReleaseCard } from './ReleaseCard';
-import { NewReleaseDialog } from './NewReleaseDialog';
-import { NewProjectDialog } from './NewProjectDialog';
-import { ManageCountriesDialog } from './ManageCountriesDialog';
 import { AssignToReleaseDialog } from './AssignToReleaseDialog';
-import { DashboardStats } from './DashboardStats';
 import { Segment, TestType, WorkflowStep, SEGMENT_LABELS, TEST_TYPE_LABELS, WORKFLOW_STEPS, getTestTypesForSegment } from '@/types/project';
 import { ReleaseModelIds } from '@/types/release';
 import { Package, Globe, MoreVertical, Trash2, Plus, Pause, Play, ChevronRight, CheckCircle2, RefreshCw, Link } from 'lucide-react';
@@ -88,17 +84,6 @@ export function ReleasesSection() {
 
   return (
     <section className="space-y-6">
-      {/* Stats */}
-      <DashboardStats projects={projects} />
-
-      {/* Action buttons */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex gap-2">
-          <NewProjectDialog onAdd={handleAddProject} countries={countries} />
-          <NewReleaseDialog onAdd={handleAddRelease} countries={countries} />
-        </div>
-      </div>
-
       {/* Active Releases */}
       {activeReleases.length > 0 && (
         <div className="space-y-4">
