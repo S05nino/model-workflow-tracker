@@ -15,12 +15,25 @@ import {
 } from "lucide-react";
 
 type Segment = "consumer" | "business" | "tagger";
+type ValueSign = "OUT" | "IN";
 
 interface FileSelection {
   accuracy: string[];
   anomalies: string[];
   precision: string[];
   stability: string[];
+}
+
+/** Build the segment_sign pattern from segment name + value sign */
+function getSignPattern(segment: string, valueSign: ValueSign): string {
+  const segCode = segment.toLowerCase() === "business" ? "3" : "1";
+  const signCode = valueSign === "IN" ? "1" : "0";
+  return `${segCode}_${signCode}`;
+}
+
+/** Filter file names that contain the expected segment_sign pattern */
+function filterBySign(files: string[], pattern: string): string[] {
+  return files.filter(f => f.includes(`_${pattern}_`));
 }
 
 export const TestSuiteSection = () => {
@@ -33,14 +46,19 @@ export const TestSuiteSection = () => {
   const [selectedSegment, setSelectedSegment] = useState<string>("");
   const [dates, setDates] = useState<string[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>("");
+  const [selectedValueSign, setSelectedValueSign] = useState<ValueSign | "">("");
 
-  // Model state
+  // Model state - raw (all files) and filtered
+  const [allProdModels, setAllProdModels] = useState<string[]>([]);
+  const [allDevModels, setAllDevModels] = useState<string[]>([]);
   const [prodModels, setProdModels] = useState<string[]>([]);
   const [devModels, setDevModels] = useState<string[]>([]);
   const [selectedProdModel, setSelectedProdModel] = useState<string>("");
   const [selectedDevModel, setSelectedDevModel] = useState<string>("");
 
-  // Expert rules state
+  // Expert rules state - raw and filtered
+  const [allExpertRulesOld, setAllExpertRulesOld] = useState<string[]>([]);
+  const [allExpertRulesNew, setAllExpertRulesNew] = useState<string[]>([]);
   const [expertRulesOld, setExpertRulesOld] = useState<string[]>([]);
   const [expertRulesNew, setExpertRulesNew] = useState<string[]>([]);
   const [selectedExpertOld, setSelectedExpertOld] = useState<string>("");
@@ -83,6 +101,7 @@ export const TestSuiteSection = () => {
     if (!selectedCountry) return;
     setSelectedSegment("");
     setSelectedDate("");
+    setSelectedValueSign("");
     resetSelections();
     (async () => {
       setLoadingStep("segments");
@@ -96,6 +115,7 @@ export const TestSuiteSection = () => {
   useEffect(() => {
     if (!selectedCountry || !selectedSegment) return;
     setSelectedDate("");
+    setSelectedValueSign("");
     resetSelections();
     (async () => {
       setLoadingStep("dates");
@@ -108,15 +128,42 @@ export const TestSuiteSection = () => {
   // When date changes, load models + samples + expert rules
   useEffect(() => {
     if (!selectedCountry || !selectedSegment || !selectedDate) return;
+    setSelectedValueSign("");
     resetSelections();
     loadDateContents();
   }, [selectedCountry, selectedSegment, selectedDate]);
 
+  // When valueSign changes, filter models and rules
+  useEffect(() => {
+    if (!selectedValueSign || !selectedSegment) return;
+    const pattern = getSignPattern(selectedSegment, selectedValueSign);
+
+    const filteredProd = filterBySign(allProdModels, pattern);
+    const filteredDev = filterBySign(allDevModels, pattern);
+    const filteredEROld = filterBySign(allExpertRulesOld, pattern);
+    const filteredERNew = filterBySign(allExpertRulesNew, pattern);
+
+    setProdModels(filteredProd);
+    setDevModels(filteredDev);
+    setExpertRulesOld(filteredEROld);
+    setExpertRulesNew(filteredERNew);
+
+    // Auto-select if only one match
+    setSelectedProdModel(filteredProd.length === 1 ? filteredProd[0] : "");
+    setSelectedDevModel(filteredDev.length === 1 ? filteredDev[0] : "");
+    setSelectedExpertOld(filteredEROld.length === 1 ? filteredEROld[0] : "");
+    setSelectedExpertNew(filteredERNew.length === 1 ? filteredERNew[0] : "");
+  }, [selectedValueSign, allProdModels, allDevModels, allExpertRulesOld, allExpertRulesNew, selectedSegment]);
+
   const resetSelections = () => {
+    setAllProdModels([]);
+    setAllDevModels([]);
     setProdModels([]);
     setDevModels([]);
     setSelectedProdModel("");
     setSelectedDevModel("");
+    setAllExpertRulesOld([]);
+    setAllExpertRulesNew([]);
     setExpertRulesOld([]);
     setExpertRulesNew([]);
     setSelectedExpertOld("");
@@ -157,14 +204,18 @@ export const TestSuiteSection = () => {
       // Prod models
       promises.push(
         s3.listModelSubfolder(country, segment, date, "prod").then(result => {
-          setProdModels(result.files.filter(f => f.name.endsWith(".zip")).map(f => f.name));
+          const zips = result.files.filter(f => f.name.endsWith(".zip")).map(f => f.name);
+          setAllProdModels(zips);
+          setProdModels(zips);
         })
       );
 
       // Dev models
       promises.push(
         s3.listModelSubfolder(country, segment, date, "develop").then(result => {
-          setDevModels(result.files.filter(f => f.name.endsWith(".zip")).map(f => f.name));
+          const zips = result.files.filter(f => f.name.endsWith(".zip")).map(f => f.name);
+          setAllDevModels(zips);
+          setDevModels(zips);
         })
       );
 
@@ -180,10 +231,16 @@ export const TestSuiteSection = () => {
               s3.listPrefix(`TEST_SUITE/${country}/${segment}/${date}/model/expertrules/old/`),
               s3.listPrefix(`TEST_SUITE/${country}/${segment}/${date}/model/expertrules/new/`),
             ]);
-            setExpertRulesOld(oldResult.files.map(f => f.name));
-            setExpertRulesNew(newResult.files.map(f => f.name));
+            const oldFiles = oldResult.files.map(f => f.name);
+            const newFiles = newResult.files.map(f => f.name);
+            setAllExpertRulesOld(oldFiles);
+            setAllExpertRulesNew(newFiles);
+            setExpertRulesOld(oldFiles);
+            setExpertRulesNew(newFiles);
           } else {
             const zips = erResult.files.filter(f => f.name.endsWith(".zip")).map(f => f.name);
+            setAllExpertRulesOld(zips);
+            setAllExpertRulesNew(zips);
             setExpertRulesOld(zips);
             setExpertRulesNew(zips);
           }
@@ -194,6 +251,8 @@ export const TestSuiteSection = () => {
       promises.push(
         s3.listSubfolder(country, segment, date, "model").then(result => {
           const zips = result.files.filter(f => f.name.endsWith(".zip")).map(f => f.name);
+          setAllProdModels(zips);
+          setAllDevModels(zips);
           setProdModels(zips);
           setDevModels(zips);
         })
@@ -233,7 +292,7 @@ export const TestSuiteSection = () => {
   };
 
   const isTagger = selectedSegment.toLowerCase() === "tagger";
-  const hasFullSelection = selectedCountry && selectedSegment && selectedDate;
+  const hasFullSelection = selectedCountry && selectedSegment && selectedDate && (isTagger || selectedValueSign);
 
   return (
     <div className="space-y-6 py-6">
@@ -263,7 +322,7 @@ export const TestSuiteSection = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {/* Country */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-muted-foreground">Country</label>
@@ -313,6 +372,32 @@ export const TestSuiteSection = () => {
                   {dates.map(d => (
                     <SelectItem key={d} value={d}>{d}</SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Value Sign (IN/OUT) */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-muted-foreground">Value Sign</label>
+              <Select
+                value={selectedValueSign}
+                onValueChange={(v) => setSelectedValueSign(v as ValueSign)}
+                disabled={!selectedDate || isTagger}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={isTagger ? "N/A" : "Seleziona IN/OUT"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="OUT">
+                    OUT {selectedSegment && !isTagger && (
+                      <span className="text-muted-foreground ml-1">({getSignPattern(selectedSegment, "OUT")})</span>
+                    )}
+                  </SelectItem>
+                  <SelectItem value="IN">
+                    IN {selectedSegment && !isTagger && (
+                      <span className="text-muted-foreground ml-1">({getSignPattern(selectedSegment, "IN")})</span>
+                    )}
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -576,7 +661,7 @@ export const TestSuiteSection = () => {
               <CardTitle className="text-base">Riepilogo Configurazione</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
                 <div>
                   <span className="text-muted-foreground block">Country</span>
                   <span className="font-medium">{selectedCountry || "—"}</span>
@@ -588,6 +673,10 @@ export const TestSuiteSection = () => {
                 <div>
                   <span className="text-muted-foreground block">Data</span>
                   <span className="font-medium">{selectedDate || "—"}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Value Sign</span>
+                  <span className="font-medium">{selectedValueSign || "—"} {selectedValueSign && !isTagger ? `(${getSignPattern(selectedSegment, selectedValueSign as ValueSign)})` : ""}</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground block">Versione</span>
