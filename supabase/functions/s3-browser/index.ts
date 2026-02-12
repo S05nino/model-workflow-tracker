@@ -31,8 +31,9 @@ serve(async (req) => {
     const prefix = url.searchParams.get("prefix") || ROOT_PREFIX;
     const s3 = getS3Client();
 
+    console.log(`[s3-browser] action=${action}, method=${req.method}, prefix=${prefix}`);
+
     if (action === "list") {
-      // List folders and files at a given prefix
       const command = new ListObjectsV2Command({
         Bucket: BUCKET,
         Prefix: prefix,
@@ -85,7 +86,10 @@ serve(async (req) => {
         });
       }
 
+      console.log(`[s3-browser] PUT key=${key}`);
       const body = await req.text();
+      console.log(`[s3-browser] PUT body length=${body.length}`);
+      
       const command = new PutObjectCommand({
         Bucket: BUCKET,
         Key: key,
@@ -93,6 +97,7 @@ serve(async (req) => {
         ContentType: "application/json",
       });
       await s3.send(command);
+      console.log(`[s3-browser] PUT success for key=${key}`);
 
       return new Response(JSON.stringify({ success: true, key }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -88,6 +88,9 @@ export const TestSuiteSection = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [runStatus, setRunStatus] = useState<string | null>(null);
   const [pollingForOutput, setPollingForOutput] = useState(false);
+  const [runLogs, setRunLogs] = useState<{ time: string; msg: string; level: 'info' | 'error' | 'success' }[]>([]);
+  const [pollProgress, setPollProgress] = useState(0);
+  const [pollCount, setPollCount] = useState(0);
 
   // Load countries on mount
   useEffect(() => {
@@ -303,7 +306,16 @@ export const TestSuiteSection = () => {
   const dateStr = `${String(today.getFullYear()).slice(2)}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
   const outputFolderName = `${version}_${dateStr}`;
 
+  const addLog = (msg: string, level: 'info' | 'error' | 'success' = 'info') => {
+    const time = new Date().toLocaleTimeString('it-IT');
+    setRunLogs(prev => [...prev, { time, msg, level }]);
+  };
+
   const handleRunTest = async () => {
+    setRunLogs([]);
+    setPollProgress(0);
+    setPollCount(0);
+
     if (!selectedProdModel || !selectedDevModel) {
       toast.error("Devi selezionare entrambi i modelli (prod e develop)");
       return;
@@ -335,47 +347,75 @@ export const TestSuiteSection = () => {
 
     setIsRunning(true);
     setRunStatus("Salvataggio configurazione su S3...");
+    addLog("📝 Preparazione configurazione test...");
+    addLog(`📍 Country: ${selectedCountry}, Segmento: ${selectedSegment}, Data: ${selectedDate}, Value Sign: ${selectedValueSign}`);
+    addLog(`📦 Old Model: ${selectedProdModel}`);
+    addLog(`📦 New Model: ${selectedDevModel}`);
 
     const configKey = `TEST_SUITE/${selectedCountry}/${selectedSegment}/${selectedDate}/config_${outputFolderName}.json`;
-    const success = await s3.putConfig(configKey, config);
+    addLog(`⬆️ Upload config su S3: ${configKey}`);
 
-    if (!success) {
-      toast.error("Errore nel salvataggio della configurazione");
+    const result = await s3.putConfig(configKey, config);
+
+    if (!result.ok) {
+      const errMsg = result.error || "Errore sconosciuto nel salvataggio della configurazione";
+      addLog(`❌ Errore upload configurazione: ${errMsg}`, 'error');
+      toast.error("Errore nel salvataggio della configurazione", {
+        description: errMsg,
+        duration: 10000,
+      });
       setIsRunning(false);
-      setRunStatus(null);
+      setRunStatus(`Errore: ${errMsg}`);
       return;
     }
 
+    addLog("✅ Configurazione salvata su S3", 'success');
     toast.success("Configurazione salvata su S3", {
       description: `Config: ${configKey}`,
     });
     setRunStatus("Configurazione salvata. Avvia dashboard.py sul PC locale per eseguire i test.");
+    addLog("⏳ In attesa che dashboard.py rilevi la configurazione e avvii i test...");
+    addLog("💡 Esegui: python dashboard.py --poll");
     setPollingForOutput(true);
 
-    // Start polling for output files in the expected output folder
+    // Start polling for output files
     const outputPrefix = `TEST_SUITE/${selectedCountry}/${selectedSegment}/${selectedDate}/output/${outputFolderName}/`;
+    const MAX_POLLS = 720; // 2 hours at 10s intervals
+    let count = 0;
+
     const pollInterval = setInterval(async () => {
-      const result = await s3.listPrefix(outputPrefix);
-      if (result.files.length > 0) {
+      count++;
+      setPollCount(count);
+      setPollProgress(Math.min((count / MAX_POLLS) * 100, 99));
+
+      try {
+        const pollResult = await s3.listPrefix(outputPrefix);
+        if (pollResult.files.length > 0) {
+          clearInterval(pollInterval);
+          setPollingForOutput(false);
+          setIsRunning(false);
+          setPollProgress(100);
+          setRunStatus("Test completati! Output disponibili.");
+          addLog(`🎉 Test completati! ${pollResult.files.length} file di output trovati.`, 'success');
+          setOutputFiles(pollResult.files.map(f => ({ name: f.name, key: f.key, size: f.size })));
+          toast.success("Output dei test disponibili!", {
+            description: `${pollResult.files.length} file trovati`,
+          });
+        } else if (count % 6 === 0) {
+          // Log every ~60s
+          addLog(`🔄 Polling #${count} - nessun output ancora (${Math.floor(count * 10 / 60)} min trascorsi)`);
+        }
+      } catch (pollErr: any) {
+        addLog(`⚠️ Errore polling: ${pollErr.message}`, 'error');
+      }
+
+      if (count >= MAX_POLLS) {
         clearInterval(pollInterval);
         setPollingForOutput(false);
-        setIsRunning(false);
-        setRunStatus("Test completati! Output disponibili.");
-        setOutputFiles(result.files.map(f => ({ name: f.name, key: f.key, size: f.size })));
-        toast.success("Output dei test disponibili!", {
-          description: `${result.files.length} file trovati`,
-        });
-      }
-    }, 10000); // poll every 10s
-
-    // Stop polling after 2 hours max
-    setTimeout(() => {
-      clearInterval(pollInterval);
-      if (pollingForOutput) {
-        setPollingForOutput(false);
         setRunStatus("Polling interrotto dopo 2 ore. Ricarica manualmente per verificare l'output.");
+        addLog("⏰ Polling interrotto dopo 2 ore.", 'error');
       }
-    }, 2 * 60 * 60 * 1000);
+    }, 10000);
   };
 
   return (
@@ -811,24 +851,53 @@ export const TestSuiteSection = () => {
                   {isRunning ? "In esecuzione..." : "🚀 Run Tests"}
                 </Button>
 
-                {runStatus && (
-                  <div className={`flex items-center gap-2 text-sm ${pollingForOutput ? 'text-amber-600' : 'text-emerald-600'}`}>
-                    {pollingForOutput && <Clock className="w-4 h-4 animate-pulse" />}
-                    {!pollingForOutput && runStatus.includes("completati") && <CheckCircle2 className="w-4 h-4" />}
-                    {runStatus}
-                  </div>
-                )}
+              {runStatus && (
+                <div className={`flex items-center gap-2 text-sm ${pollingForOutput ? 'text-amber-600' : runStatus.includes('Errore') ? 'text-destructive' : 'text-emerald-600'}`}>
+                  {pollingForOutput && <Clock className="w-4 h-4 animate-pulse" />}
+                  {!pollingForOutput && runStatus.includes("completati") && <CheckCircle2 className="w-4 h-4" />}
+                  {runStatus.includes("Errore") && <AlertCircle className="w-4 h-4" />}
+                  {runStatus}
+                </div>
+              )}
               </div>
 
+              {/* Progress bar during polling */}
               {pollingForOutput && (
-                <div className="mt-3 p-3 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-sm">
-                  <Clock className="w-4 h-4 inline mr-2 text-amber-600" />
-                  In attesa che <code className="font-mono text-xs bg-muted px-1 rounded">dashboard.py</code> completi i test e carichi l'output su S3.
-                  La pagina controlla automaticamente ogni 10 secondi.
-                  <br />
-                  <span className="text-xs text-muted-foreground mt-1 block">
-                    Output atteso in: <code>TEST_SUITE/{selectedCountry}/{selectedSegment}/{selectedDate}/output/{outputFolderName}/</code>
-                  </span>
+                <div className="mt-4 space-y-2">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>Polling per output (ogni 10s)...</span>
+                    <span>Check #{pollCount} • {Math.floor(pollCount * 10 / 60)} min</span>
+                  </div>
+                  <Progress value={pollProgress} className="h-2" />
+                  <p className="text-xs text-muted-foreground">
+                    Output atteso in: <code className="font-mono bg-muted px-1 rounded">output/{outputFolderName}/</code>
+                  </p>
+                </div>
+              )}
+
+              {/* Log panel */}
+              {runLogs.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium">Log esecuzione</label>
+                    <Button variant="ghost" size="sm" onClick={() => setRunLogs([])}>
+                      Pulisci
+                    </Button>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto rounded-md border bg-muted/30 p-3 space-y-1 font-mono text-xs">
+                    {runLogs.map((log, i) => (
+                      <div
+                        key={i}
+                        className={`${
+                          log.level === 'error' ? 'text-destructive' :
+                          log.level === 'success' ? 'text-emerald-600' :
+                          'text-muted-foreground'
+                        }`}
+                      >
+                        <span className="opacity-50">[{log.time}]</span> {log.msg}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </CardContent>

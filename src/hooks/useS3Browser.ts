@@ -91,7 +91,9 @@ export function useS3Browser() {
     }
   }, []);
 
-  const putConfig = useCallback(async (key: string, config: Record<string, unknown>): Promise<boolean> => {
+  const putConfig = useCallback(async (key: string, config: Record<string, unknown>): Promise<{ ok: boolean; error?: string }> => {
+    setLoading(true);
+    setError(null);
     try {
       const baseUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/s3-browser`;
       const url = `${baseUrl}?action=put&key=${encodeURIComponent(key)}`;
@@ -104,9 +106,19 @@ export function useS3Browser() {
         },
         body: JSON.stringify(config),
       });
-      return res.ok;
-    } catch {
-      return false;
+      if (!res.ok) {
+        const errBody = await res.text();
+        const errMsg = `S3 put failed (${res.status}): ${errBody}`;
+        setError(errMsg);
+        return { ok: false, error: errMsg };
+      }
+      return { ok: true };
+    } catch (e: any) {
+      const errMsg = `Errore di rete: ${e.message}`;
+      setError(errMsg);
+      return { ok: false, error: errMsg };
+    } finally {
+      setLoading(false);
     }
   }, []);
 
