@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { S3Client, ListObjectsV2Command, GetObjectCommand } from "npm:@aws-sdk/client-s3@3.600.0";
+import { S3Client, ListObjectsV2Command, GetObjectCommand, PutObjectCommand } from "npm:@aws-sdk/client-s3@3.600.0";
 import { getSignedUrl } from "npm:@aws-sdk/s3-request-presigner@3.600.0";
 
 const corsHeaders = {
@@ -72,6 +72,29 @@ serve(async (req) => {
       const presignedUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
 
       return new Response(JSON.stringify({ url: presignedUrl }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "put") {
+      const key = url.searchParams.get("key");
+      if (!key) {
+        return new Response(JSON.stringify({ error: "Missing key param" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const body = await req.text();
+      const command = new PutObjectCommand({
+        Bucket: BUCKET,
+        Key: key,
+        Body: body,
+        ContentType: "application/json",
+      });
+      await s3.send(command);
+
+      return new Response(JSON.stringify({ success: true, key }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -11,7 +12,7 @@ import { useS3Browser } from "@/hooks/useS3Browser";
 import {
   Globe, Layers, Calendar, FileArchive, FlaskConical,
   FolderOpen, Download, Loader2, RefreshCw, ChevronRight,
-  AlertCircle, CheckCircle2, FileSpreadsheet
+  AlertCircle, CheckCircle2, FileSpreadsheet, Play, Clock
 } from "lucide-react";
 
 type Segment = "consumer" | "business" | "tagger";
@@ -81,8 +82,12 @@ export const TestSuiteSection = () => {
   const [companyLists, setCompanyLists] = useState<string[]>([]);
   const [selectedCompanyList, setSelectedCompanyList] = useState<string>("");
 
-  // Loading states
   const [loadingStep, setLoadingStep] = useState<string | null>(null);
+
+  // Run test state
+  const [isRunning, setIsRunning] = useState(false);
+  const [runStatus, setRunStatus] = useState<string | null>(null);
+  const [pollingForOutput, setPollingForOutput] = useState(false);
 
   // Load countries on mount
   useEffect(() => {
@@ -293,6 +298,85 @@ export const TestSuiteSection = () => {
 
   const isTagger = selectedSegment.toLowerCase() === "tagger";
   const hasFullSelection = selectedCountry && selectedSegment && selectedDate && (isTagger || selectedValueSign);
+
+  const today = new Date();
+  const dateStr = `${String(today.getFullYear()).slice(2)}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
+  const outputFolderName = `${version}_${dateStr}`;
+
+  const handleRunTest = async () => {
+    if (!selectedProdModel || !selectedDevModel) {
+      toast.error("Devi selezionare entrambi i modelli (prod e develop)");
+      return;
+    }
+    if (version === "x.x.x" || !version) {
+      toast.error("Inserisci la versione del modello");
+      return;
+    }
+
+    const config: Record<string, unknown> = {
+      country: selectedCountry,
+      segment: selectedSegment,
+      date: selectedDate,
+      value_sign: selectedValueSign,
+      sign_pattern: !isTagger ? getSignPattern(selectedSegment, selectedValueSign as ValueSign) : null,
+      version,
+      output_folder_name: outputFolderName,
+      old_model: selectedProdModel,
+      new_model: selectedDevModel,
+      old_expert_rules: selectedExpertOld && selectedExpertOld !== "__none__" ? selectedExpertOld : null,
+      new_expert_rules: selectedExpertNew && selectedExpertNew !== "__none__" ? selectedExpertNew : null,
+      has_old_new_expert_structure: hasOldNewStructure,
+      sample_files: isTagger
+        ? { distribution: fileSelection.accuracy[0] || null, company_list: selectedCompanyList || null }
+        : fileSelection,
+      s3_root: `TEST_SUITE/${selectedCountry}/${selectedSegment}/${selectedDate}`,
+      created_at: new Date().toISOString(),
+    };
+
+    setIsRunning(true);
+    setRunStatus("Salvataggio configurazione su S3...");
+
+    const configKey = `TEST_SUITE/${selectedCountry}/${selectedSegment}/${selectedDate}/config_${outputFolderName}.json`;
+    const success = await s3.putConfig(configKey, config);
+
+    if (!success) {
+      toast.error("Errore nel salvataggio della configurazione");
+      setIsRunning(false);
+      setRunStatus(null);
+      return;
+    }
+
+    toast.success("Configurazione salvata su S3", {
+      description: `Config: ${configKey}`,
+    });
+    setRunStatus("Configurazione salvata. Avvia dashboard.py sul PC locale per eseguire i test.");
+    setPollingForOutput(true);
+
+    // Start polling for output files in the expected output folder
+    const outputPrefix = `TEST_SUITE/${selectedCountry}/${selectedSegment}/${selectedDate}/output/${outputFolderName}/`;
+    const pollInterval = setInterval(async () => {
+      const result = await s3.listPrefix(outputPrefix);
+      if (result.files.length > 0) {
+        clearInterval(pollInterval);
+        setPollingForOutput(false);
+        setIsRunning(false);
+        setRunStatus("Test completati! Output disponibili.");
+        setOutputFiles(result.files.map(f => ({ name: f.name, key: f.key, size: f.size })));
+        toast.success("Output dei test disponibili!", {
+          description: `${result.files.length} file trovati`,
+        });
+      }
+    }, 10000); // poll every 10s
+
+    // Stop polling after 2 hours max
+    setTimeout(() => {
+      clearInterval(pollInterval);
+      if (pollingForOutput) {
+        setPollingForOutput(false);
+        setRunStatus("Polling interrotto dopo 2 ore. Ricarica manualmente per verificare l'output.");
+      }
+    }, 2 * 60 * 60 * 1000);
+  };
 
   return (
     <div className="space-y-6 py-6">
@@ -710,11 +794,43 @@ export const TestSuiteSection = () => {
                 </div>
               )}
 
-              <div className="mt-4 p-3 rounded-md bg-muted/50 text-sm text-muted-foreground">
-                <AlertCircle className="w-4 h-4 inline mr-2" />
-                L'esecuzione dei test richiede l'ambiente Windows locale con le dipendenze .NET.
-                Usa questa dashboard per configurare e navigare i file, poi esegui lo script Python dal PC locale.
+              <Separator className="my-4" />
+
+              <div className="flex items-center gap-4">
+                <Button
+                  onClick={handleRunTest}
+                  disabled={isRunning || !selectedProdModel || !selectedDevModel || version === "x.x.x"}
+                  className="gap-2"
+                  size="lg"
+                >
+                  {isRunning ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Play className="w-4 h-4" />
+                  )}
+                  {isRunning ? "In esecuzione..." : "🚀 Run Tests"}
+                </Button>
+
+                {runStatus && (
+                  <div className={`flex items-center gap-2 text-sm ${pollingForOutput ? 'text-amber-600' : 'text-emerald-600'}`}>
+                    {pollingForOutput && <Clock className="w-4 h-4 animate-pulse" />}
+                    {!pollingForOutput && runStatus.includes("completati") && <CheckCircle2 className="w-4 h-4" />}
+                    {runStatus}
+                  </div>
+                )}
               </div>
+
+              {pollingForOutput && (
+                <div className="mt-3 p-3 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-sm">
+                  <Clock className="w-4 h-4 inline mr-2 text-amber-600" />
+                  In attesa che <code className="font-mono text-xs bg-muted px-1 rounded">dashboard.py</code> completi i test e carichi l'output su S3.
+                  La pagina controlla automaticamente ogni 10 secondi.
+                  <br />
+                  <span className="text-xs text-muted-foreground mt-1 block">
+                    Output atteso in: <code>TEST_SUITE/{selectedCountry}/{selectedSegment}/{selectedDate}/output/{outputFolderName}/</code>
+                  </span>
+                </div>
+              )}
             </CardContent>
           </Card>
 
