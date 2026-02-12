@@ -91,6 +91,25 @@ export function useS3Browser() {
     }
   }, []);
 
+  const putConfig = useCallback(async (key: string, config: Record<string, unknown>): Promise<boolean> => {
+    try {
+      const baseUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/s3-browser`;
+      const url = `${baseUrl}?action=put&key=${encodeURIComponent(key)}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(config),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }, []);
+
   return {
     loading,
     error,
@@ -101,5 +120,6 @@ export function useS3Browser() {
     listSubfolder,
     listModelSubfolder,
     getPresignedUrl,
+    putConfig,
   };
 }
