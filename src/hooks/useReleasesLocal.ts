@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Release, ReleaseModel, ReleaseModelIds } from "@/types/release";
-import { Segment } from "@/types/project";
+import { Segment, WorkflowStep, WorkflowRound, TestType, ProjectStatus } from "@/types/project";
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
@@ -165,6 +165,68 @@ export function useReleasesLocal() {
     });
   };
 
+  const updateModelStep = async (releaseId: string, modelId: string, step: WorkflowStep) => {
+    const release = releases.find(r => r.id === releaseId);
+    if (!release) return;
+    const model = release.models.find(m => m.id === modelId);
+    if (!model) return;
+    const rounds = model.rounds || [];
+    const currentRoundIdx = rounds.findIndex(r => r.roundNumber === (model.currentRound || 1));
+    if (currentRoundIdx === -1) return;
+    const updatedRounds = [...rounds];
+    updatedRounds[currentRoundIdx] = {
+      ...updatedRounds[currentRoundIdx],
+      currentStep: step,
+      ...(step === 3 ? { completedAt: new Date().toISOString() } : {}),
+    };
+    await saveRelease({
+      id: releaseId,
+      models: release.models.map(m => m.id === modelId ? {
+        ...m,
+        rounds: updatedRounds,
+        status: step === 3 ? 'waiting' as ProjectStatus : m.status,
+        awaitingConfirmation: step === 3 ? true : m.awaitingConfirmation,
+      } : m),
+      updatedAt: new Date().toISOString(),
+    });
+  };
+
+  const startModelNewRound = async (releaseId: string, modelId: string, testType: TestType) => {
+    const release = releases.find(r => r.id === releaseId);
+    if (!release) return;
+    const model = release.models.find(m => m.id === modelId);
+    if (!model) return;
+    const newRoundNumber = (model.currentRound || 1) + 1;
+    const newRound: WorkflowRound = {
+      id: generateId(),
+      roundNumber: newRoundNumber,
+      testType,
+      currentStep: 1,
+      startedAt: new Date().toISOString(),
+    };
+    await saveRelease({
+      id: releaseId,
+      models: release.models.map(m => m.id === modelId ? {
+        ...m,
+        currentRound: newRoundNumber,
+        rounds: [...(m.rounds || []), newRound],
+        status: 'in-progress' as ProjectStatus,
+        awaitingConfirmation: false,
+      } : m),
+      updatedAt: new Date().toISOString(),
+    });
+  };
+
+  const updateModelStatus = async (releaseId: string, modelId: string, status: ProjectStatus) => {
+    const release = releases.find(r => r.id === releaseId);
+    if (!release) return;
+    await saveRelease({
+      id: releaseId,
+      models: release.models.map(m => m.id === modelId ? { ...m, status } : m),
+      updatedAt: new Date().toISOString(),
+    });
+  };
+
   return {
     releases,
     loading,
@@ -176,6 +238,9 @@ export function useReleasesLocal() {
     deleteRelease,
     completeRelease,
     updateReleaseDate,
+    updateModelStep,
+    startModelNewRound,
+    updateModelStatus,
     refetch: fetchReleases,
   };
 }

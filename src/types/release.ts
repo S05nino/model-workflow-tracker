@@ -1,4 +1,4 @@
-import { Segment } from './project';
+import { Segment, WorkflowRound, ProjectStatus } from './project';
 
 export interface ReleaseModelIds {
   modelOut?: string;
@@ -15,6 +15,11 @@ export interface ReleaseModel {
   confirmed: boolean;
   modelIds?: ReleaseModelIds;
   confirmedAt?: string;
+  // Workflow fields
+  status?: ProjectStatus;
+  currentRound?: number;
+  rounds?: WorkflowRound[];
+  awaitingConfirmation?: boolean;
 }
 
 export interface Release {
