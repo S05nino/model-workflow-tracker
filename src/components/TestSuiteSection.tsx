@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { useState, useEffect, useCallback } from "react";
-import { useS3Browser } from "@/hooks/useS3Browser";
+import { useLocalBrowser } from "@/hooks/useLocalBrowser";
 import {
   Globe, Layers, Calendar, FileArchive, FlaskConical,
   FolderOpen, Download, Loader2, RefreshCw, ChevronRight,
@@ -38,7 +38,7 @@ function filterBySign(files: string[], pattern: string): string[] {
 }
 
 export const TestSuiteSection = () => {
-  const s3 = useS3Browser();
+  const browser = useLocalBrowser();
 
   // Navigation state
   const [countries, setCountries] = useState<string[]>([]);
@@ -99,7 +99,7 @@ export const TestSuiteSection = () => {
 
   const loadCountries = async () => {
     setLoadingStep("countries");
-    const result = await s3.listCountries();
+    const result = await browser.listCountries();
     setCountries(result.folders.map(f => f.name).sort());
     setLoadingStep(null);
   };
@@ -113,7 +113,7 @@ export const TestSuiteSection = () => {
     resetSelections();
     (async () => {
       setLoadingStep("segments");
-      const result = await s3.listSegments(selectedCountry);
+      const result = await browser.listSegments(selectedCountry);
       setSegments(result.folders.map(f => f.name).sort());
       setLoadingStep(null);
     })();
@@ -127,7 +127,7 @@ export const TestSuiteSection = () => {
     resetSelections();
     (async () => {
       setLoadingStep("dates");
-      const result = await s3.listDates(selectedCountry, selectedSegment);
+      const result = await browser.listDates(selectedCountry, selectedSegment);
       setDates(result.folders.map(f => f.name).sort().reverse());
       setLoadingStep(null);
     })();
@@ -196,7 +196,7 @@ export const TestSuiteSection = () => {
 
     // Sample files
     promises.push(
-      s3.listSubfolder(country, segment, date, "sample").then(result => {
+      browser.listSubfolder(country, segment, date, "Sample").then(result => {
         const tsv = result.files.filter(f => f.name.endsWith(".tsv.gz")).map(f => f.name);
         setSampleFiles(tsv);
         if (!isTagger) {
@@ -211,7 +211,7 @@ export const TestSuiteSection = () => {
     if (!isTagger) {
       // Prod models
       promises.push(
-        s3.listModelSubfolder(country, segment, date, "prod").then(result => {
+        browser.listModelSubfolder(country, segment, date, "prod").then(result => {
           const zips = result.files.filter(f => f.name.endsWith(".zip")).map(f => f.name);
           setAllProdModels(zips);
           setProdModels(zips);
@@ -220,7 +220,7 @@ export const TestSuiteSection = () => {
 
       // Dev models
       promises.push(
-        s3.listModelSubfolder(country, segment, date, "develop").then(result => {
+        browser.listModelSubfolder(country, segment, date, "develop").then(result => {
           const zips = result.files.filter(f => f.name.endsWith(".zip")).map(f => f.name);
           setAllDevModels(zips);
           setDevModels(zips);
@@ -230,14 +230,14 @@ export const TestSuiteSection = () => {
       // Expert rules - check for old/new structure
       promises.push(
         (async () => {
-          const erResult = await s3.listModelSubfolder(country, segment, date, "expertrules");
+          const erResult = await browser.listModelSubfolder(country, segment, date, "expertrules");
           const hasOldNew = erResult.folders.some(f => f.name === "old" || f.name === "new");
           setHasOldNewStructure(hasOldNew);
 
           if (hasOldNew) {
             const [oldResult, newResult] = await Promise.all([
-              s3.listPrefix(`TEST_SUITE/${country}/${segment}/${date}/model/expertrules/old/`),
-              s3.listPrefix(`TEST_SUITE/${country}/${segment}/${date}/model/expertrules/new/`),
+              browser.listPath(`${country}/${segment}/${date}/model/expertrules/old`),
+              browser.listPath(`${country}/${segment}/${date}/model/expertrules/new`),
             ]);
             const oldFiles = oldResult.files.map(f => f.name);
             const newFiles = newResult.files.map(f => f.name);
@@ -257,7 +257,7 @@ export const TestSuiteSection = () => {
     } else {
       // Tagger: models are directly in model/
       promises.push(
-        s3.listSubfolder(country, segment, date, "model").then(result => {
+        browser.listSubfolder(country, segment, date, "model").then(result => {
           const zips = result.files.filter(f => f.name.endsWith(".zip")).map(f => f.name);
           setAllProdModels(zips);
           setAllDevModels(zips);
@@ -269,7 +269,7 @@ export const TestSuiteSection = () => {
 
     // Output files
     promises.push(
-      s3.listSubfolder(country, segment, date, "output").then(result => {
+      browser.listSubfolder(country, segment, date, "output").then(result => {
         setOutputFiles(result.files.map(f => ({ name: f.name, key: f.key, size: f.size })));
       })
     );
@@ -289,14 +289,9 @@ export const TestSuiteSection = () => {
   };
 
   const handleDownloadFile = async (key: string, name: string) => {
-    toast.info(`Generazione link per ${name}...`);
-    const url = await s3.getPresignedUrl(key);
-    if (url) {
-      window.open(url, "_blank");
-      toast.success(`Download avviato: ${name}`);
-    } else {
-      toast.error("Errore nella generazione del link");
-    }
+    const url = browser.getDownloadUrl(key);
+    window.open(url, "_blank");
+    toast.success(`Download avviato: ${name}`);
   };
 
   const isTagger = selectedSegment.toLowerCase() === "tagger";
@@ -341,25 +336,25 @@ export const TestSuiteSection = () => {
       sample_files: isTagger
         ? { distribution: fileSelection.accuracy[0] || null, company_list: selectedCompanyList || null }
         : fileSelection,
-      s3_root: `TEST_SUITE/${selectedCountry}/${selectedSegment}/${selectedDate}`,
+      data_root: `${selectedCountry}/${selectedSegment}/${selectedDate}`,
       created_at: new Date().toISOString(),
     };
 
     setIsRunning(true);
-    setRunStatus("Salvataggio configurazione su S3...");
+    setRunStatus("Salvataggio configurazione locale...");
     addLog("📝 Preparazione configurazione test...");
     addLog(`📍 Country: ${selectedCountry}, Segmento: ${selectedSegment}, Data: ${selectedDate}, Value Sign: ${selectedValueSign}`);
     addLog(`📦 Old Model: ${selectedProdModel}`);
     addLog(`📦 New Model: ${selectedDevModel}`);
 
-    const configKey = `TEST_SUITE/${selectedCountry}/${selectedSegment}/${selectedDate}/config_${outputFolderName}.json`;
-    addLog(`⬆️ Upload config su S3: ${configKey}`);
+    const configFilename = `config_${outputFolderName}.json`;
+    addLog(`💾 Salvataggio config locale: ${configFilename}`);
 
-    const result = await s3.putConfig(configKey, config);
+    const result = await browser.saveConfig(configFilename, config);
 
     if (!result.ok) {
       const errMsg = result.error || "Errore sconosciuto nel salvataggio della configurazione";
-      addLog(`❌ Errore upload configurazione: ${errMsg}`, 'error');
+      addLog(`❌ Errore salvataggio configurazione: ${errMsg}`, 'error');
       toast.error("Errore nel salvataggio della configurazione", {
         description: errMsg,
         duration: 10000,
@@ -369,17 +364,17 @@ export const TestSuiteSection = () => {
       return;
     }
 
-    addLog("✅ Configurazione salvata su S3", 'success');
-    toast.success("Configurazione salvata su S3", {
-      description: `Config: ${configKey}`,
+    addLog(`✅ Configurazione salvata: ${result.path}`, 'success');
+    toast.success("Configurazione salvata", {
+      description: `File: ${configFilename}`,
     });
-    setRunStatus("Configurazione salvata. Avvia dashboard.py sul PC locale per eseguire i test.");
+    setRunStatus("Configurazione salvata. Avvia dashboard.py per eseguire i test.");
     addLog("⏳ In attesa che dashboard.py rilevi la configurazione e avvii i test...");
-    addLog("💡 Esegui: python dashboard.py --poll");
+    addLog(`💡 Esegui: python dashboard.py --config ${result.path}`);
     setPollingForOutput(true);
 
-    // Start polling for output files
-    const outputPrefix = `TEST_SUITE/${selectedCountry}/${selectedSegment}/${selectedDate}/output/${outputFolderName}/`;
+    // Start polling for output files on network share
+    const outputRelPath = `${selectedCountry}/${selectedSegment}/${selectedDate}/output/${outputFolderName}`;
     const MAX_POLLS = 720; // 2 hours at 10s intervals
     let count = 0;
 
@@ -389,17 +384,17 @@ export const TestSuiteSection = () => {
       setPollProgress(Math.min((count / MAX_POLLS) * 100, 99));
 
       try {
-        const pollResult = await s3.listPrefix(outputPrefix);
-        if (pollResult.files.length > 0) {
+        const outputFiles = await browser.checkOutput(outputRelPath);
+        if (outputFiles.length > 0) {
           clearInterval(pollInterval);
           setPollingForOutput(false);
           setIsRunning(false);
           setPollProgress(100);
           setRunStatus("Test completati! Output disponibili.");
-          addLog(`🎉 Test completati! ${pollResult.files.length} file di output trovati.`, 'success');
-          setOutputFiles(pollResult.files.map(f => ({ name: f.name, key: f.key, size: f.size })));
+          addLog(`🎉 Test completati! ${outputFiles.length} file di output trovati.`, 'success');
+          setOutputFiles(outputFiles.map(f => ({ name: f.name, key: f.key, size: f.size })));
           toast.success("Output dei test disponibili!", {
-            description: `${pollResult.files.length} file trovati`,
+            description: `${outputFiles.length} file trovati`,
           });
         } else if (count % 6 === 0) {
           // Log every ~60s
@@ -428,7 +423,7 @@ export const TestSuiteSection = () => {
             Test Suite Dashboard
           </h2>
           <p className="text-sm text-muted-foreground">
-            Sfoglia i dati su S3, seleziona modelli e file per i test
+            Sfoglia i dati sulla rete, seleziona modelli e file per i test
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={loadCountries} disabled={!!loadingStep}>
@@ -531,7 +526,7 @@ export const TestSuiteSection = () => {
           {selectedCountry && (
             <div className="mt-3 flex items-center gap-1 text-xs text-muted-foreground">
               <FolderOpen className="w-3 h-3" />
-              <span>s3://cateng/TEST_SUITE</span>
+              <span>\\sassrv04\...\TEST_SUITE</span>
               <ChevronRight className="w-3 h-3" />
               <span className="text-foreground font-medium">{selectedCountry}</span>
               {selectedSegment && (
