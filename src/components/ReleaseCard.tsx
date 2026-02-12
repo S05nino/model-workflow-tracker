@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Release, ReleaseModelIds } from '@/types/release';
-import { CountryConfig, Segment, SEGMENT_LABELS } from '@/types/project';
+import { CountryConfig, Segment, WorkflowStep, TestType } from '@/types/project';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ConfirmModelDialog } from './ConfirmModelDialog';
+import { ReleaseModelRow } from './ReleaseModelRow';
 import { AddModelToReleaseDialog } from './AddModelToReleaseDialog';
 import { EditReleaseDateDialog } from './EditReleaseDateDialog';
 import {
@@ -18,17 +18,15 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-import { 
-  Calendar, 
-  Package, 
-  MoreVertical, 
-  Trash2, 
-  CheckCircle2,
-  XCircle,
-  ChevronDown,
-  ChevronRight,
+import {
+  Calendar,
+  Package,
+  MoreVertical,
+  Trash2,
   Check,
   CalendarDays,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import { format, parseISO, isPast, differenceInDays } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -43,6 +41,9 @@ interface ReleaseCardProps {
   onUpdateDate: (newDate: string) => void;
   onDelete: () => void;
   onComplete: () => void;
+  onUpdateModelStep: (modelId: string, step: WorkflowStep) => void;
+  onStartModelNewRound: (modelId: string, testType: TestType) => void;
+  onUpdateModelStatus: (modelId: string, status: string) => void;
 }
 
 export function ReleaseCard({
@@ -54,13 +55,11 @@ export function ReleaseCard({
   onUpdateDate,
   onDelete,
   onComplete,
+  onUpdateModelStep,
+  onStartModelNewRound,
+  onUpdateModelStatus,
 }: ReleaseCardProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [confirmingModel, setConfirmingModel] = useState<{
-    id: string;
-    country: string;
-    segment: string;
-  } | null>(null);
   const [editingDate, setEditingDate] = useState(false);
 
   const targetDate = parseISO(release.targetDate);
@@ -70,10 +69,6 @@ export function ReleaseCard({
   const includedModels = release.models.filter(m => m.included);
   const confirmedCount = includedModels.filter(m => m.confirmed).length;
   const allConfirmed = confirmedCount === includedModels.length && includedModels.length > 0;
-
-  const getCountryName = (code: string) => {
-    return countries.find(c => c.code === code)?.name || code;
-  };
 
   return (
     <>
@@ -112,7 +107,7 @@ export function ReleaseCard({
               <Badge variant={release.completed ? 'success' : allConfirmed ? 'warning' : 'secondary'}>
                 {release.completed ? 'Completato' : `${confirmedCount}/${includedModels.length}`}
               </Badge>
-              
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -132,7 +127,7 @@ export function ReleaseCard({
                       Completa Rilascio
                     </DropdownMenuItem>
                   )}
-                  <DropdownMenuItem 
+                  <DropdownMenuItem
                     onClick={onDelete}
                     className="text-destructive focus:text-destructive"
                   >
@@ -147,80 +142,37 @@ export function ReleaseCard({
           <CollapsibleContent>
             <CardContent className="pt-0">
               <div className="space-y-2">
-                {release.models.map((model) => {
-                  const countryName = getCountryName(model.country);
-                  
-                  return (
-                    <div
-                      key={model.id}
-                      className={cn(
-                        "flex items-center justify-between p-3 rounded-lg border",
-                        !model.included && "opacity-50 bg-muted/30",
-                        model.confirmed && "bg-success/10 border-success/30"
-                      )}
-                    >
-                      <div className="flex items-center gap-3">
-                        {model.confirmed ? (
-                          <CheckCircle2 className="w-5 h-5 text-success" />
-                        ) : model.included ? (
-                          <div className="w-5 h-5 rounded-full border-2 border-muted-foreground/30" />
-                        ) : (
-                          <XCircle className="w-5 h-5 text-muted-foreground" />
-                        )}
-                        
-                        <div>
-                          <p className="font-medium text-foreground">
-                            {countryName} <span className="text-muted-foreground font-normal">({model.country})</span>
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {SEGMENT_LABELS[model.segment]}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {model.confirmed && model.modelIds && (
-                          <div className="text-xs text-muted-foreground text-right mr-2 space-y-0.5">
-                            {model.modelIds.modelOut && <span className="block">Model Out: {model.modelIds.modelOut}</span>}
-                            {model.modelIds.modelIn && <span className="block">Model In: {model.modelIds.modelIn}</span>}
-                            {model.modelIds.rulesOut && <span className="block">Rules Out: {model.modelIds.rulesOut}</span>}
-                            {model.modelIds.rulesIn && <span className="block">Rules In: {model.modelIds.rulesIn}</span>}
-                          </div>
-                        )}
-                        
-                        {!release.completed && !allConfirmed && (
-                          <>
-                            {model.included && !model.confirmed && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setConfirmingModel({
-                                  id: model.id,
-                                  country: countryName,
-                                  segment: SEGMENT_LABELS[model.segment],
-                                })}
-                              >
-                                Conferma
-                              </Button>
-                            )}
-                            
-                            {!model.confirmed && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => onToggleInclusion(model.id)}
-                              >
-                                {model.included ? 'Escludi' : 'Includi'}
-                              </Button>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+                {release.models.filter(m => m.included).map((model) => (
+                  <ReleaseModelRow
+                    key={model.id}
+                    model={model}
+                    countries={countries}
+                    releaseCompleted={release.completed}
+                    allConfirmed={allConfirmed}
+                    onToggleInclusion={() => onToggleInclusion(model.id)}
+                    onConfirmModel={(modelIds) => onConfirmModel(model.id, modelIds)}
+                    onUpdateStep={(step) => onUpdateModelStep(model.id, step)}
+                    onStartNewRound={(testType) => onStartModelNewRound(model.id, testType)}
+                    onUpdateStatus={(status) => onUpdateModelStatus(model.id, status as string)}
+                  />
+                ))}
+                {/* Excluded models shown at bottom */}
+                {release.models.filter(m => !m.included).map((model) => (
+                  <ReleaseModelRow
+                    key={model.id}
+                    model={model}
+                    countries={countries}
+                    releaseCompleted={release.completed}
+                    allConfirmed={allConfirmed}
+                    onToggleInclusion={() => onToggleInclusion(model.id)}
+                    onConfirmModel={(modelIds) => onConfirmModel(model.id, modelIds)}
+                    onUpdateStep={(step) => onUpdateModelStep(model.id, step)}
+                    onStartNewRound={(testType) => onStartModelNewRound(model.id, testType)}
+                    onUpdateStatus={(status) => onUpdateModelStatus(model.id, status as string)}
+                  />
+                ))}
               </div>
-              
+
               {!release.completed && !allConfirmed && (
                 <div className="mt-4 pt-4 border-t">
                   <AddModelToReleaseDialog
@@ -234,16 +186,6 @@ export function ReleaseCard({
           </CollapsibleContent>
         </Collapsible>
       </Card>
-
-      {confirmingModel && (
-        <ConfirmModelDialog
-          open={!!confirmingModel}
-          onOpenChange={(open) => !open && setConfirmingModel(null)}
-          countryName={confirmingModel.country}
-          segment={confirmingModel.segment}
-          onConfirm={(modelIds) => onConfirmModel(confirmingModel.id, modelIds)}
-        />
-      )}
 
       <EditReleaseDateDialog
         open={editingDate}
