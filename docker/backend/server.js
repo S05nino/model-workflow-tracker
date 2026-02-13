@@ -132,35 +132,20 @@ app.post('/api/testsuite/run', (req, res) => {
     return res.status(400).json({ error: 'Missing config' });
   }
 
-  // Save config.json next to dashboard.py (project root)
+  // Save config.json to the project root (mounted volume -> host filesystem)
   const projectRoot = process.env.PROJECT_ROOT || path.join(__dirname, '..', '..');
   const configPath = path.join(projectRoot, 'config.json');
-  const dashboardPath = path.join(projectRoot, 'dashboard.py');
 
   console.log(`[testsuite/run] Saving config.json to: ${configPath}`);
-  console.log(`[testsuite/run] dashboard.py path: ${dashboardPath}`);
 
   try {
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
     console.log(`[testsuite/run] config.json saved successfully`);
+    res.json({ ok: true, configPath });
   } catch (err) {
     console.error('[testsuite/run] Error saving config:', err.message);
     return res.status(500).json({ error: `Failed to save config: ${err.message}` });
   }
-
-  // Spawn streamlit run dashboard.py
-  const { spawn } = require('child_process');
-  const streamlitProcess = spawn('streamlit', ['run', dashboardPath], {
-    cwd: projectRoot,
-    shell: true,
-    detached: true,
-    stdio: 'ignore',
-  });
-
-  streamlitProcess.unref();
-
-  console.log(`[testsuite/run] Spawned streamlit process PID: ${streamlitProcess.pid}`);
-  res.json({ ok: true, configPath, dashboardPath, pid: streamlitProcess.pid });
 });
 
 // List saved configs

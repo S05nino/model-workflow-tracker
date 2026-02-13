@@ -22,9 +22,11 @@ services:
       - DATA_PATH=/data/data.json
       - TESTSUITE_ROOT=/data/TEST_SUITE
       - TESTSUITE_CONFIG_DIR=/configs
+      - PROJECT_ROOT=/project
     volumes:
       - ./data:/data
       - ./docker/backend/configs:/configs
+      - .:/project
     networks:
       - ml-workflow
 
