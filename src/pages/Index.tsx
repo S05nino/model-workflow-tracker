@@ -16,8 +16,28 @@ import { exportDashboardReport } from '@/lib/exportReport';
 import { toast } from 'sonner';
 
 const Index = () => {
-  const { projects, addProject } = useProjects();
-  const { releases, addRelease } = useReleases();
+  const {
+    projects,
+    addProject,
+    updateProjectStep,
+    startNewRound,
+    confirmProject,
+    updateProjectStatus,
+    deleteProject,
+  } = useProjects();
+  const {
+    releases,
+    addRelease,
+    toggleModelInclusion,
+    confirmModelInRelease,
+    addModelToRelease,
+    deleteRelease,
+    completeRelease,
+    updateReleaseDate,
+    updateModelStep,
+    startModelNewRound,
+    updateModelStatus,
+  } = useReleases();
   const { countries, addCountry, removeCountry } = useCountries();
   const [activeTab, setActiveTab] = useState("releases");
   const [testSuitePrefill, setTestSuitePrefill] = useState<TestSuitePrefillEvent | null>(null);
@@ -96,7 +116,25 @@ const Index = () => {
           </div>
 
           <TabsContent value="releases">
-            <ReleasesSection />
+            <ReleasesSection
+              releases={releases}
+              countries={countries}
+              projects={projects}
+              toggleModelInclusion={toggleModelInclusion}
+              confirmModelInRelease={confirmModelInRelease}
+              addModelToRelease={addModelToRelease}
+              deleteRelease={deleteRelease}
+              completeRelease={completeRelease}
+              updateReleaseDate={updateReleaseDate}
+              updateModelStep={updateModelStep}
+              startModelNewRound={startModelNewRound}
+              updateModelStatus={updateModelStatus}
+              updateProjectStep={updateProjectStep}
+              startNewRound={startNewRound}
+              confirmProject={confirmProject}
+              updateProjectStatus={updateProjectStatus}
+              deleteProject={deleteProject}
+            />
           </TabsContent>
 
           <TabsContent value="testsuite">
