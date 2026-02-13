@@ -201,10 +201,32 @@ app.post('/api/validate-password', (req, res) => {
 const TESTSUITE_ROOT = process.env.TESTSUITE_ROOT || path.join(__dirname, '..', '..', 'data', 'TEST_SUITE');
 const CONFIG_DIR = process.env.TESTSUITE_CONFIG_DIR || path.join(__dirname, 'configs');
 
+console.log(`[startup] TESTSUITE_ROOT = ${TESTSUITE_ROOT}`);
+console.log(`[startup] TESTSUITE_ROOT exists = ${fs.existsSync(TESTSUITE_ROOT)}`);
+if (fs.existsSync(TESTSUITE_ROOT)) {
+  const topLevel = fs.readdirSync(TESTSUITE_ROOT);
+  console.log(`[startup] TEST_SUITE contents: ${topLevel.join(', ')}`);
+}
+
 // Ensure config dir exists
 if (!fs.existsSync(CONFIG_DIR)) {
   fs.mkdirSync(CONFIG_DIR, { recursive: true });
 }
+
+// Health check endpoint for diagnostics
+app.get('/api/testsuite/health', (req, res) => {
+  const exists = fs.existsSync(TESTSUITE_ROOT);
+  let contents = [];
+  if (exists) {
+    try { contents = fs.readdirSync(TESTSUITE_ROOT); } catch (e) {}
+  }
+  res.json({
+    testsuite_root: TESTSUITE_ROOT,
+    exists,
+    contents,
+    config_dir: CONFIG_DIR,
+  });
+});
 
 // List directories and files under a relative path in the network share
 app.get('/api/testsuite/list', (req, res) => {
