@@ -7,6 +7,25 @@ services:
       dockerfile: docker/frontend/Dockerfile
     ports:
       - "8080:80"
+    depends_on:
+      - backend
+    networks:
+      - ml-workflow
+
+  backend:
+    build:
+      context: docker/backend
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - DATA_PATH=/data/data.json
+      - TESTSUITE_ROOT=//sassrv04/DA_WWCC1/1_Global_Analytics_Consultancy/R1_2/PRODUCT/CE/01_Data/TEST_SUITE
+      - TESTSUITE_CONFIG_DIR=/configs
+    volumes:
+      - ./data:/data
+      - ./docker/backend/configs:/configs
+      - //sassrv04/DA_WWCC1/1_Global_Analytics_Consultancy/R1_2/PRODUCT/CE/01_Data/TEST_SUITE:/testsuite:ro
     networks:
       - ml-workflow
 

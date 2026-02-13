@@ -50,153 +50,6 @@ const writeData = (data) => {
   }
 };
 
-// ===== Test Suite: Network Share Browsing =====
-// IMPORTANT: These routes MUST be defined BEFORE the generic /api/:table routes
-const TESTSUITE_ROOT = process.env.TESTSUITE_ROOT || String.raw`\\sassrv04\DA_WWCC1\1_Global_Analytics_Consultancy\R1_2\PRODUCT\CE\01_Data\TEST_SUITE`;
-const CONFIG_DIR = process.env.TESTSUITE_CONFIG_DIR || path.join(__dirname, 'configs');
-
-// Ensure config dir exists
-if (!fs.existsSync(CONFIG_DIR)) {
-  fs.mkdirSync(CONFIG_DIR, { recursive: true });
-}
-
-// Debug endpoint: check testsuite root accessibility
-app.get('/api/testsuite/debug', (req, res) => {
-  try {
-    const exists = fs.existsSync(TESTSUITE_ROOT);
-    let contents = [];
-    if (exists) {
-      contents = fs.readdirSync(TESTSUITE_ROOT).slice(0, 30);
-    }
-    res.json({ root: TESTSUITE_ROOT, exists, contents, configDir: CONFIG_DIR });
-  } catch (err) {
-    res.json({ root: TESTSUITE_ROOT, exists: false, error: err.message });
-  }
-});
-
-// List directories and files under a relative path in the network share
-app.get('/api/testsuite/list', (req, res) => {
-  const relPath = req.query.path || '';
-  const fullPath = path.join(TESTSUITE_ROOT, relPath);
-
-  console.log(`[testsuite/list] path=${relPath} -> ${fullPath}`);
-
-  try {
-    if (!fs.existsSync(fullPath)) {
-      console.warn(`[testsuite/list] Path does not exist: ${fullPath}`);
-      return res.json({ folders: [], files: [] });
-    }
-    const entries = fs.readdirSync(fullPath, { withFileTypes: true });
-    const folders = entries
-      .filter(e => e.isDirectory())
-      .map(e => ({ name: e.name, prefix: path.join(relPath, e.name).replace(/\\/g, '/') + '/' }));
-    const files = entries
-      .filter(e => e.isFile())
-      .map(e => {
-        const filePath = path.join(fullPath, e.name);
-        const stats = fs.statSync(filePath);
-        return {
-          name: e.name,
-          key: path.join(relPath, e.name).replace(/\\/g, '/'),
-          size: stats.size,
-          lastModified: stats.mtime.toISOString(),
-        };
-      });
-    console.log(`[testsuite/list] Found ${folders.length} folders, ${files.length} files`);
-    res.json({ folders, files });
-  } catch (err) {
-    console.error('[testsuite/list] Error:', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// List saved configs
-app.get('/api/testsuite/configs', (req, res) => {
-  try {
-    if (!fs.existsSync(CONFIG_DIR)) {
-      return res.json({ configs: [] });
-    }
-    const files = fs.readdirSync(CONFIG_DIR).filter(f => f.endsWith('.json'));
-    res.json({ configs: files });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Check output folder for results
-app.get('/api/testsuite/output', (req, res) => {
-  const relPath = req.query.path || '';
-  const fullPath = path.join(TESTSUITE_ROOT, relPath);
-
-  try {
-    if (!fs.existsSync(fullPath)) {
-      return res.json({ files: [] });
-    }
-    const entries = fs.readdirSync(fullPath, { withFileTypes: true });
-    const files = entries.filter(e => e.isFile()).map(e => {
-      const filePath = path.join(fullPath, e.name);
-      const stats = fs.statSync(filePath);
-      return {
-        name: e.name,
-        key: path.join(relPath, e.name).replace(/\\/g, '/'),
-        size: stats.size,
-        lastModified: stats.mtime.toISOString(),
-      };
-    });
-    res.json({ files });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Download a file from the network share
-app.get('/api/testsuite/download', (req, res) => {
-  const relPath = req.query.path || '';
-  const fullPath = path.join(TESTSUITE_ROOT, relPath);
-
-  if (!fs.existsSync(fullPath)) {
-    return res.status(404).json({ error: 'File not found' });
-  }
-
-  res.download(fullPath);
-});
-
-// Save test config JSON locally
-app.post('/api/testsuite/config', (req, res) => {
-  const { filename, config } = req.body;
-  if (!filename || !config) {
-    return res.status(400).json({ error: 'Missing filename or config' });
-  }
-
-  const configPath = path.join(CONFIG_DIR, filename);
-  console.log(`[testsuite/config] Saving config: ${configPath}`);
-
-  try {
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-    res.json({ ok: true, path: configPath });
-  } catch (err) {
-    console.error('[testsuite/config] Error:', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Special endpoint for password validation
-app.post('/api/validate-password', (req, res) => {
-  const { password } = req.body;
-  const data = readData();
-  
-  const config = data.app_config.find(c => c.key === 'shared_password');
-  if (!config) {
-    data.app_config.push({ key: 'shared_password', value: password });
-    writeData(data);
-    return res.json({ valid: true });
-  }
-  
-  res.json({ valid: config.value === password });
-});
-
-// ===== Generic CRUD routes (MUST be after specific routes) =====
-
 // GET all data from a table
 app.get('/api/:table', (req, res) => {
   const { table } = req.params;
@@ -328,6 +181,135 @@ app.delete('/api/:table/:id', (req, res) => {
   }
 });
 
+// Special endpoint for password validation
+app.post('/api/validate-password', (req, res) => {
+  const { password } = req.body;
+  const data = readData();
+  
+  const config = data.app_config.find(c => c.key === 'shared_password');
+  if (!config) {
+    // If no password set, accept any password and set it
+    data.app_config.push({ key: 'shared_password', value: password });
+    writeData(data);
+    return res.json({ valid: true });
+  }
+  
+  res.json({ valid: config.value === password });
+});
+
+// ===== Test Suite: Network Share Browsing =====
+const TESTSUITE_ROOT = process.env.TESTSUITE_ROOT || String.raw`\\sassrv04\DA_WWCC1\1_Global_Analytics_Consultancy\R1_2\PRODUCT\CE\01_Data\TEST_SUITE`;
+const CONFIG_DIR = process.env.TESTSUITE_CONFIG_DIR || path.join(__dirname, 'configs');
+
+// Ensure config dir exists
+if (!fs.existsSync(CONFIG_DIR)) {
+  fs.mkdirSync(CONFIG_DIR, { recursive: true });
+}
+
+// List directories and files under a relative path in the network share
+app.get('/api/testsuite/list', (req, res) => {
+  const relPath = req.query.path || '';
+  const fullPath = path.join(TESTSUITE_ROOT, relPath);
+
+  console.log(`[testsuite/list] path=${relPath} -> ${fullPath}`);
+
+  try {
+    if (!fs.existsSync(fullPath)) {
+      return res.json({ folders: [], files: [] });
+    }
+    const entries = fs.readdirSync(fullPath, { withFileTypes: true });
+    const folders = entries
+      .filter(e => e.isDirectory())
+      .map(e => ({ name: e.name, prefix: path.join(relPath, e.name).replace(/\\/g, '/') + '/' }));
+    const files = entries
+      .filter(e => e.isFile())
+      .map(e => {
+        const filePath = path.join(fullPath, e.name);
+        const stats = fs.statSync(filePath);
+        return {
+          name: e.name,
+          key: path.join(relPath, e.name).replace(/\\/g, '/'),
+          size: stats.size,
+          lastModified: stats.mtime.toISOString(),
+        };
+      });
+    res.json({ folders, files });
+  } catch (err) {
+    console.error('[testsuite/list] Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Save test config JSON locally
+app.post('/api/testsuite/config', (req, res) => {
+  const { filename, config } = req.body;
+  if (!filename || !config) {
+    return res.status(400).json({ error: 'Missing filename or config' });
+  }
+
+  const configPath = path.join(CONFIG_DIR, filename);
+  console.log(`[testsuite/config] Saving config: ${configPath}`);
+
+  try {
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+    res.json({ ok: true, path: configPath });
+  } catch (err) {
+    console.error('[testsuite/config] Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// List saved configs
+app.get('/api/testsuite/configs', (req, res) => {
+  try {
+    if (!fs.existsSync(CONFIG_DIR)) {
+      return res.json({ configs: [] });
+    }
+    const files = fs.readdirSync(CONFIG_DIR).filter(f => f.endsWith('.json'));
+    res.json({ configs: files });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Check output folder for results
+app.get('/api/testsuite/output', (req, res) => {
+  const relPath = req.query.path || '';
+  const fullPath = path.join(TESTSUITE_ROOT, relPath);
+
+  try {
+    if (!fs.existsSync(fullPath)) {
+      return res.json({ files: [] });
+    }
+    const entries = fs.readdirSync(fullPath, { withFileTypes: true });
+    const files = entries.filter(e => e.isFile()).map(e => {
+      const filePath = path.join(fullPath, e.name);
+      const stats = fs.statSync(filePath);
+      return {
+        name: e.name,
+        key: path.join(relPath, e.name).replace(/\\/g, '/'),
+        size: stats.size,
+        lastModified: stats.mtime.toISOString(),
+      };
+    });
+    res.json({ files });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Download a file from the network share
+app.get('/api/testsuite/download', (req, res) => {
+  const relPath = req.query.path || '';
+  const fullPath = path.join(TESTSUITE_ROOT, relPath);
+
+  if (!fs.existsSync(fullPath)) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+
+  res.download(fullPath);
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', dataPath: DATA_PATH, testsuiteRoot: TESTSUITE_ROOT });
@@ -339,16 +321,4 @@ app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
   console.log(`Data file location: ${path.resolve(DATA_PATH)}`);
   console.log(`TestSuite root: ${TESTSUITE_ROOT}`);
-  try {
-    const exists = fs.existsSync(TESTSUITE_ROOT);
-    if (exists) {
-      const dirs = fs.readdirSync(TESTSUITE_ROOT);
-      console.log(`✅ TestSuite root accessible: ${dirs.length} entries found`);
-      console.log(`  Entries: ${dirs.slice(0, 10).join(', ')}${dirs.length > 10 ? '...' : ''}`);
-    } else {
-      console.warn(`⚠️ TestSuite root NOT FOUND: ${TESTSUITE_ROOT}`);
-    }
-  } catch (err) {
-    console.error(`❌ TestSuite root ERROR: ${err.message}`);
-  }
 });
