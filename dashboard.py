@@ -180,11 +180,48 @@ stability_files = sample_files_cfg.get("stability", [])
 #  AZURE BATCH SETTINGS
 # ============================================================
 
-st.subheader("⚙️ Azure Batch Settings")
-vm_bench = st.radio("VM for Benchmark", options=[1, 2, 3, 4], index=0, horizontal=True)
-vm_dev = st.radio("VM for Development", options=[x for x in [1, 2, 3, 4] if x != vm_bench], index=0, horizontal=True)
+vm_bench = config.get("vm_for_bench", 1)
+vm_dev = config.get("vm_for_dev", 2)
+
+st.sidebar.info(f"VM Benchmark: {vm_bench} | VM Development: {vm_dev}")
 
 azure_batch = True
+
+# ============================================================
+#  VM BUSY DETECTION
+# ============================================================
+
+import logging
+import io
+
+class StreamlitLogHandler(logging.Handler):
+    """Captures log messages and checks for VM busy state."""
+    def __init__(self):
+        super().__init__()
+        self.vm_busy = False
+    
+    def emit(self, record):
+        msg = self.format(record)
+        if "Virtual machine is already running" in msg:
+            self.vm_busy = True
+            st.error("🚫 La macchina virtuale Azure è già in uso! Attendi che l'esecuzione corrente termini o seleziona una VM diversa.")
+
+log_handler = StreamlitLogHandler()
+logging.getLogger().addHandler(log_handler)
+
+# Also capture stdout for subprocess messages
+class VMBusyCapture:
+    def __init__(self, original):
+        self.original = original
+    def write(self, text):
+        if "Virtual machine is already running" in text:
+            st.error("🚫 La macchina virtuale Azure è già in uso! Attendi che l'esecuzione corrente termini o seleziona una VM diversa.")
+        self.original.write(text)
+    def flush(self):
+        self.original.flush()
+
+sys.stdout = VMBusyCapture(sys.stdout)
+sys.stderr = VMBusyCapture(sys.stderr)
 
 # ============================================================
 #  RUN TESTS
@@ -286,6 +323,10 @@ if st.button("🚀 Run Tests"):
     final = runner.save_reports(weights=None, excel=True, pdf=False)
 
     st.success("🎉 Tests completed!")
+
+    # Auto-close after a few seconds (Streamlit can't close the tab, but we show a message)
+    st.balloons()
+    st.info("✅ Esecuzione completata. Puoi chiudere questa scheda e tornare alla dashboard principale.")
 
     # --- Show model_information ---
     report_path = os.path.join(runner.output_folder, runner.old_uid,

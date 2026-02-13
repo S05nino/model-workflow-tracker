@@ -2,6 +2,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { ReportViewer } from "@/components/report/ReportViewer";
+import { parseReportFile, ParsedReport } from "@/lib/reportParser";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -118,6 +120,7 @@ export const TestSuiteSection = () => {
   const [runLogs, setRunLogs] = useState<{ time: string; msg: string; level: 'info' | 'error' | 'success' }[]>([]);
   const [pollProgress, setPollProgress] = useState(0);
   const [pollCount, setPollCount] = useState(0);
+  const [outputReports, setOutputReports] = useState<ParsedReport[]>([]);
 
   const segments = selectedCountry ? (COUNTRY_SEGMENTS[selectedCountry] || []) : [];
 
@@ -296,6 +299,76 @@ export const TestSuiteSection = () => {
     setRunLogs(prev => [...prev, { time, msg, level }]);
   };
 
+  const pollForOutputs = async () => {
+    const API_BASE = import.meta.env.VITE_BACKEND_URL || '';
+    const outputPath = `${basePath}/output/${outputFolderName}`;
+    const maxPolls = 360; // 60 min at 10s intervals
+    let count = 0;
+
+    const poll = async () => {
+      count++;
+      setPollCount(count);
+      setPollProgress(Math.min((count / maxPolls) * 100, 99));
+
+      try {
+        const res = await fetch(`${API_BASE}/api/testsuite/output?path=${encodeURIComponent(outputPath)}`);
+        const data = await res.json();
+        const reportFiles = (data.files || []).filter((f: any) => f.name.startsWith('report') && f.name.endsWith('.xlsx'));
+
+        if (count % 6 === 0) {
+          addLog(`🔄 Polling #${count} - ${reportFiles.length} report trovati (${Math.floor(count * 10 / 60)} min trascorsi)`);
+        }
+
+        if (reportFiles.length > 0) {
+          addLog(`✅ Trovati ${reportFiles.length} report Excel!`, 'success');
+          setPollingForOutput(false);
+          setRunStatus("Test completati! Report disponibili.");
+          setOutputFiles(reportFiles);
+
+          // Parse and display reports
+          await loadOutputReports(reportFiles, outputPath);
+          return;
+        }
+      } catch (err) {
+        // ignore polling errors
+      }
+
+      if (count >= maxPolls) {
+        addLog("⏱️ Timeout polling raggiunto (60 min)", 'error');
+        setPollingForOutput(false);
+        setRunStatus("Timeout - controlla manualmente la cartella output");
+        return;
+      }
+
+      setTimeout(poll, 10000);
+    };
+
+    poll();
+  };
+
+  const loadOutputReports = async (files: { name: string; key: string }[], outputPath: string) => {
+    const API_BASE = import.meta.env.VITE_BACKEND_URL || '';
+    const reports: ParsedReport[] = [];
+
+    for (const file of files) {
+      try {
+        const downloadUrl = `${API_BASE}/api/testsuite/download?path=${encodeURIComponent(file.key)}`;
+        const res = await fetch(downloadUrl);
+        const blob = await res.blob();
+        const fileObj = new File([blob], file.name, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const parsed = await parseReportFile(fileObj);
+        reports.push(parsed);
+      } catch (err) {
+        addLog(`⚠️ Errore parsing ${file.name}: ${(err as Error).message}`, 'error');
+      }
+    }
+
+    setOutputReports(reports);
+    if (reports.length > 0) {
+      toast.success(`${reports.length} report caricati e visualizzati!`);
+    }
+  };
+
   const handleRunTest = async () => {
     setRunLogs([]);
     setPollProgress(0);
@@ -364,8 +437,8 @@ export const TestSuiteSection = () => {
       description: `File: ${configFilename}`,
     });
 
-    // Save config.json to host via backend and open Streamlit
-    addLog("🚀 Salvataggio config.json e avvio Streamlit...");
+    // Save config.json to host via backend
+    addLog("🚀 Salvataggio config.json...");
     setRunStatus("Salvataggio config.json...");
     try {
       const API_BASE = import.meta.env.VITE_BACKEND_URL || '';
@@ -378,16 +451,18 @@ export const TestSuiteSection = () => {
       if (runData.ok) {
         addLog(`✅ config.json salvato in: ${runData.configPath}`, 'success');
         
-        // Open Streamlit in a new browser tab
-        const streamlitUrl = 'http://localhost:8501';
-        addLog(`🌐 Apertura Streamlit: ${streamlitUrl}`);
-        window.open(streamlitUrl, '_blank');
-        
         toast.success("config.json salvato!", {
-          description: "Streamlit aperto in una nuova scheda. Assicurati che sia in esecuzione: streamlit run dashboard.py",
+          description: "Avvia streamlit run dashboard.py nel terminale, poi i test partiranno automaticamente.",
         });
-        setRunStatus("config.json salvato. Streamlit aperto in nuova scheda.");
-        addLog("✅ Controlla la scheda Streamlit per l'andamento dei test.", 'success');
+        setRunStatus("config.json salvato. Avvia streamlit run dashboard.py nel terminale.");
+        addLog("ℹ️ Avvia: streamlit run dashboard.py", 'info');
+
+        // Start polling for output files
+        addLog("⏳ Polling per output nella cartella...", 'info');
+        setPollingForOutput(true);
+        setPollCount(0);
+        setPollProgress(0);
+        pollForOutputs();
       } else {
         addLog(`⚠️ Errore: ${runData.error}`, 'error');
         toast.error("Errore nel salvataggio della configurazione");
@@ -980,6 +1055,27 @@ export const TestSuiteSection = () => {
                     </div>
                   ))}
                 </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Parsed Report Viewers */}
+          {outputReports.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <FileSpreadsheet className="w-4 h-4 text-primary" />
+                  Report Generati ({outputReports.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {outputReports.map((report, i) => (
+                  <ReportViewer
+                    key={`${report.fileName}-${i}`}
+                    report={report}
+                    onRemove={() => setOutputReports(prev => prev.filter((_, idx) => idx !== i))}
+                  />
+                ))}
               </CardContent>
             </Card>
           )}
