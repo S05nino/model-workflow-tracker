@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
@@ -14,13 +15,15 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Plus } from 'lucide-react';
 import { CountryConfig, Segment, SEGMENT_LABELS } from '@/types/project';
+import { Release } from '@/types/release';
 
 interface NewReleaseDialogProps {
   onAdd: (version: string, targetDate: string, models: { country: string; segment: Segment }[]) => void;
   countries: CountryConfig[];
+  releases?: Release[];
 }
 
-export function NewReleaseDialog({ onAdd, countries }: NewReleaseDialogProps) {
+export function NewReleaseDialog({ onAdd, countries, releases = [] }: NewReleaseDialogProps) {
   const [open, setOpen] = useState(false);
   const [version, setVersion] = useState('');
   const [targetDate, setTargetDate] = useState('');
@@ -41,6 +44,12 @@ export function NewReleaseDialog({ onAdd, countries }: NewReleaseDialogProps) {
 
   const handleSubmit = () => {
     if (!version.trim() || !targetDate || selectedModels.length === 0) return;
+    
+    const duplicateVersion = releases.some(r => r.version === version.trim());
+    if (duplicateVersion) {
+      toast.error('Esiste già un rilascio con questa versione');
+      return;
+    }
     
     onAdd(version.trim(), targetDate, selectedModels);
     setVersion('');
