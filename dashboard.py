@@ -10,9 +10,6 @@ import json
 import os
 import sys
 import datetime
-import shutil
-import glob
-import tempfile
 import time
 import argparse
 
@@ -29,42 +26,48 @@ from suite_tests.testRunner import TestRunner
 from suite_tests.testRunner_tagger import TestRunner as TestRunnerTagger
 
 # --- Constants ---
-NETWORK_ROOT = r"\\sassrv04\DA_WWCC1\1_Global_Analytics_Consultancy\R1_2\PRODUCT\CE\01_Data\TEST_SUITE"
-CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "docker", "backend", "configs")
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+TESTSUITE_ROOT = os.path.join(PROJECT_ROOT, "data", "TEST_SUITE")
+CONFIG_DIR = os.path.join(PROJECT_ROOT, "docker", "backend", "configs")
 AZURE_BATCH = True
 AZURE_BATCH_VM_PATH = r"C:\Users\kq5simmarine\AppData\Local\Categorization.Classifier.NoJWT\Utils\Categorization.Classifier.Batch.AzureDataScience"
 CERT_THUMBPRINT = 'D0E4EB9FB0506DEF78ECF1283319760E980C1736'
 APP_ID = '5fd0a365-b1c7-48c4-ba16-bdc211ddad84'
 
+# --- Progress tracking ---
+STEPS_STANDARD = ["crossvalidation", "accuracy", "anomalies", "precision", "stability", "reports"]
+STEPS_TAGGER = ["crossvalidation", "distribution", "reports"]
 
-# --- Logging helper ---
-def log(msg: str):
-    """Log to Streamlit or stdout."""
+
+def log(msg: str, progress_bar=None, step_idx=None, total_steps=None):
+    """Log to Streamlit or stdout, optionally update progress bar."""
     if HAS_STREAMLIT:
         st.write(msg)
+        if progress_bar is not None and step_idx is not None and total_steps is not None:
+            progress_bar.progress(min(step_idx / total_steps, 1.0))
     print(msg)
 
 
-def run_from_config(config: dict):
-    """Execute the test suite based on a config dictionary, using network share paths."""
+def run_from_config(config: dict, progress_bar=None):
+    """Execute the test suite based on a config dictionary."""
     country = config["country"]
     segment = config["segment"]
-    date = config["date"]
     version = config["version"]
     output_folder_name = config["output_folder_name"]
-    data_root = config.get("data_root", f"{country}/{segment}/{date}")
+    data_root = config.get("data_root", f"{country}/{segment}")
     is_tagger = segment.lower() == "tagger"
 
-    # Base path on network share
-    base_path = os.path.join(NETWORK_ROOT, data_root.replace("/", os.sep))
+    base_path = os.path.join(TESTSUITE_ROOT, data_root.replace("/", os.sep))
+    steps = STEPS_TAGGER if is_tagger else STEPS_STANDARD
+    total = len(steps)
+    current = 0
 
     log(f"\n{'='*60}")
-    log(f"🧪 Test Suite: {country} / {segment} / {date}")
+    log(f"🧪 Test Suite: {country} / {segment}")
     log(f"📦 Versione: {version} | Output: {output_folder_name}")
     log(f"📁 Base path: {base_path}")
-    log(f"{'='*60}\n")
+    log(f"{'='*60}\n", progress_bar, 0, total)
 
-    # Verify base path exists
     if not os.path.exists(base_path):
         log(f"❌ ERRORE: Il percorso base non esiste: {base_path}")
         return
@@ -76,7 +79,6 @@ def run_from_config(config: dict):
         old_model_path = os.path.join(model_dir, "prod", config["old_model"])
         new_model_path = os.path.join(model_dir, "develop", config["new_model"])
 
-        # Verify models exist
         for p, label in [(old_model_path, "Old model (prod)"), (new_model_path, "New model (develop)")]:
             if not os.path.exists(p):
                 log(f"❌ ERRORE: {label} non trovato: {p}")
@@ -112,10 +114,10 @@ def run_from_config(config: dict):
             log(f"✅ {label}: {p}")
 
     # --- Sample files ---
-    sample_dir = os.path.join(base_path, "Sample")
+    sample_dir = os.path.join(base_path, "sample")
     sample_files_config = config.get("sample_files", {})
 
-    # --- Create output directory on network share ---
+    # --- Create output directory ---
     output_dir = os.path.join(base_path, "output", output_folder_name)
     os.makedirs(output_dir, exist_ok=True)
     log(f"📁 Output directory: {output_dir}")
@@ -134,7 +136,8 @@ def run_from_config(config: dict):
             )
 
             # Crossvalidation
-            log("📊 Calcolo crossvalidation...")
+            current += 1
+            log(f"📊 [{current}/{total}] Calcolo crossvalidation...", progress_bar, current, total)
             runner.compute_crossvalidation_score(
                 old_expert_rules_zip_path=old_expert_path,
                 new_expert_rules_zip_path=new_expert_path,
@@ -145,18 +148,18 @@ def run_from_config(config: dict):
             vm_dev = 2
 
             # Accuracy
+            current += 1
+            log(f"🎯 [{current}/{total}] Accuracy tests...", progress_bar, current, total)
             for i, f in enumerate(sample_files_config.get("accuracy", []), start=1):
                 tag = f"A_{i}"
                 sample_path = os.path.join(sample_dir, f)
-                log(f"🎯 Accuracy test {i}: {f}")
+                log(f"   Accuracy test {i}: {f}")
                 if not os.path.exists(sample_path):
-                    log(f"⚠️ File non trovato, skip: {sample_path}")
+                    log(f"   ⚠️ File non trovato, skip: {sample_path}")
                     continue
                 runner.compute_validation_scores(
-                    sample_path,
-                    save=True, tag=tag,
-                    azure_batch=AZURE_BATCH,
-                    azure_batch_vm_path=AZURE_BATCH_VM_PATH,
+                    sample_path, save=True, tag=tag,
+                    azure_batch=AZURE_BATCH, azure_batch_vm_path=AZURE_BATCH_VM_PATH,
                     old_expert_rules_zip_path=old_expert_path,
                     new_expert_rules_zip_path=new_expert_path,
                     ServicePrincipal_CertificateThumbprint=CERT_THUMBPRINT,
@@ -165,17 +168,17 @@ def run_from_config(config: dict):
                 )
 
             # Anomalies
+            current += 1
+            log(f"🔍 [{current}/{total}] Anomalies tests...", progress_bar, current, total)
             for f in sample_files_config.get("anomalies", []):
                 sample_path = os.path.join(sample_dir, f)
-                log(f"🔍 Anomalies test: {f}")
+                log(f"   Anomalies test: {f}")
                 if not os.path.exists(sample_path):
-                    log(f"⚠️ File non trovato, skip: {sample_path}")
+                    log(f"   ⚠️ File non trovato, skip: {sample_path}")
                     continue
                 runner.compute_validation_scores(
-                    sample_path,
-                    save=True, tag="ANOM",
-                    azure_batch=AZURE_BATCH,
-                    azure_batch_vm_path=AZURE_BATCH_VM_PATH,
+                    sample_path, save=True, tag="ANOM",
+                    azure_batch=AZURE_BATCH, azure_batch_vm_path=AZURE_BATCH_VM_PATH,
                     old_expert_rules_zip_path=old_expert_path,
                     new_expert_rules_zip_path=new_expert_path,
                     ServicePrincipal_CertificateThumbprint=CERT_THUMBPRINT,
@@ -184,17 +187,17 @@ def run_from_config(config: dict):
                 )
 
             # Precision
+            current += 1
+            log(f"🎯 [{current}/{total}] Precision tests...", progress_bar, current, total)
             for f in sample_files_config.get("precision", []):
                 sample_path = os.path.join(sample_dir, f)
-                log(f"🎯 Precision test: {f}")
+                log(f"   Precision test: {f}")
                 if not os.path.exists(sample_path):
-                    log(f"⚠️ File non trovato, skip: {sample_path}")
+                    log(f"   ⚠️ File non trovato, skip: {sample_path}")
                     continue
                 runner.compute_validation_scores(
-                    sample_path,
-                    save=True, tag="PREC",
-                    azure_batch=AZURE_BATCH,
-                    azure_batch_vm_path=AZURE_BATCH_VM_PATH,
+                    sample_path, save=True, tag="PREC",
+                    azure_batch=AZURE_BATCH, azure_batch_vm_path=AZURE_BATCH_VM_PATH,
                     old_expert_rules_zip_path=old_expert_path,
                     new_expert_rules_zip_path=new_expert_path,
                     ServicePrincipal_CertificateThumbprint=CERT_THUMBPRINT,
@@ -203,18 +206,18 @@ def run_from_config(config: dict):
                 )
 
             # Stability
+            current += 1
+            log(f"📈 [{current}/{total}] Stability tests...", progress_bar, current, total)
             for i, f in enumerate(sample_files_config.get("stability", []), start=1):
                 tag = f"S_{i}"
                 sample_path = os.path.join(sample_dir, f)
-                log(f"📈 Stability test {i}: {f}")
+                log(f"   Stability test {i}: {f}")
                 if not os.path.exists(sample_path):
-                    log(f"⚠️ File non trovato, skip: {sample_path}")
+                    log(f"   ⚠️ File non trovato, skip: {sample_path}")
                     continue
                 runner.compute_validation_distribution(
-                    sample_path,
-                    save=True, tag=tag,
-                    azure_batch=AZURE_BATCH,
-                    azure_batch_vm_path=AZURE_BATCH_VM_PATH,
+                    sample_path, save=True, tag=tag,
+                    azure_batch=AZURE_BATCH, azure_batch_vm_path=AZURE_BATCH_VM_PATH,
                     old_expert_rules_zip_path=old_expert_path,
                     new_expert_rules_zip_path=new_expert_path,
                     ServicePrincipal_CertificateThumbprint=CERT_THUMBPRINT,
@@ -223,41 +226,43 @@ def run_from_config(config: dict):
                 )
 
             # Save reports
-            log("💾 Salvataggio report...")
+            current += 1
+            log(f"💾 [{current}/{total}] Salvataggio report...", progress_bar, current, total)
             runner.save_reports(weights=None, excel=True, pdf=False)
 
         else:
             # Tagger
             runner = TestRunnerTagger(old_model_path, new_model_path, output_dir)
 
-            log("📊 Tagger crossvalidation...")
+            current += 1
+            log(f"📊 [{current}/{total}] Tagger crossvalidation...", progress_bar, current, total)
             runner.compute_tagger_crossvalidation_score(save=True)
 
             distribution_file = sample_files_config.get("distribution")
             company_list = sample_files_config.get("company_list")
             path_list_companies = os.path.join(sample_dir, company_list) if company_list else None
 
+            current += 1
             if distribution_file:
                 dist_path = os.path.join(sample_dir, distribution_file)
-                log(f"📈 Tagger validation distribution: {distribution_file}")
+                log(f"📈 [{current}/{total}] Tagger validation distribution: {distribution_file}", progress_bar, current, total)
                 if not os.path.exists(dist_path):
-                    log(f"⚠️ File non trovato: {dist_path}")
+                    log(f"   ⚠️ File non trovato: {dist_path}")
                 else:
                     runner.compute_tagger_validation_distribution(
-                        validation_data_path=dist_path,
-                        save=True,
-                        azure_batch=AZURE_BATCH,
-                        azure_batch_vm_path=AZURE_BATCH_VM_PATH,
+                        validation_data_path=dist_path, save=True,
+                        azure_batch=AZURE_BATCH, azure_batch_vm_path=AZURE_BATCH_VM_PATH,
                         path_list_companies=path_list_companies,
                         ServicePrincipal_CertificateThumbprint=CERT_THUMBPRINT,
                         ServicePrincipal_ApplicationId=APP_ID,
                         vm_for_bench=1, vm_for_dev=2,
                     )
 
-            log("💾 Salvataggio report tagger...")
+            current += 1
+            log(f"💾 [{current}/{total}] Salvataggio report tagger...", progress_bar, current, total)
             runner.save_tagger_reports(excel=True)
 
-        log(f"\n🎉 Test completati! Output salvato in: {output_dir}")
+        log(f"\n🎉 Test completati! Output salvato in: {output_dir}", progress_bar, total, total)
 
     except Exception as e:
         log(f"\n❌ ERRORE durante l'esecuzione: {str(e)}")
@@ -293,13 +298,11 @@ def main():
     args = parser.parse_args()
 
     if args.config:
-        # Run a specific config file
         log(f"📋 Caricamento config: {args.config}")
         with open(args.config, "r") as f:
             config = json.load(f)
         run_from_config(config)
     elif args.watch:
-        # Watch mode: check for pending configs
         log(f"🔄 Watching cartella config: {CONFIG_DIR}")
         while True:
             configs = find_pending_configs()
@@ -311,12 +314,11 @@ def main():
                     run_from_config(config)
                     mark_config_done(config_path)
                     log(f"✅ Configurazione completata: {config_path}")
-                break  # Exit after processing
+                break
             else:
                 log("⏳ Nessuna configurazione pendente. Riprovo tra 5 secondi...")
                 time.sleep(5)
     else:
-        # Default: check once
         configs = find_pending_configs()
         if configs:
             config_path = configs[0]
@@ -339,6 +341,7 @@ if __name__ == "__main__":
 if HAS_STREAMLIT:
     st.title("🧪 Test Suite Runner")
     st.info(f"Questa dashboard legge le configurazioni da: {CONFIG_DIR}")
+    st.caption(f"TEST_SUITE root: {TESTSUITE_ROOT}")
 
     if st.button("▶️ Cerca ed esegui configurazioni pendenti"):
         configs = find_pending_configs()
@@ -350,8 +353,12 @@ if HAS_STREAMLIT:
                 with open(config_path, "r") as f:
                     config = json.load(f)
                 st.json(config)
+
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+
                 with st.spinner("Esecuzione test..."):
-                    run_from_config(config)
+                    run_from_config(config, progress_bar=progress_bar)
                 mark_config_done(config_path)
                 st.success(f"✅ Completato: {config_path}")
             st.balloons()

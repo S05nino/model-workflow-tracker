@@ -1,0 +1,11 @@
+# Ignore all data files but keep folder structure
+**/sample/*
+!**/sample/.gitkeep
+**/model/develop/*
+!**/model/develop/.gitkeep
+**/model/expertrules/*
+!**/model/expertrules/.gitkeep
+**/model/prod/*
+!**/model/prod/.gitkeep
+**/output/*
+!**/output/.gitkeep

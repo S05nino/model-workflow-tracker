@@ -197,8 +197,8 @@ app.post('/api/validate-password', (req, res) => {
   res.json({ valid: config.value === password });
 });
 
-// ===== Test Suite: Network Share Browsing =====
-const TESTSUITE_ROOT = process.env.TESTSUITE_ROOT || String.raw`\\sassrv04\DA_WWCC1\1_Global_Analytics_Consultancy\R1_2\PRODUCT\CE\01_Data\TEST_SUITE`;
+// ===== Test Suite: Local Folder Browsing =====
+const TESTSUITE_ROOT = process.env.TESTSUITE_ROOT || path.join(__dirname, '..', '..', 'data', 'TEST_SUITE');
 const CONFIG_DIR = process.env.TESTSUITE_CONFIG_DIR || path.join(__dirname, 'configs');
 
 // Ensure config dir exists
