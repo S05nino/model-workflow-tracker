@@ -198,7 +198,7 @@ app.post('/api/validate-password', (req, res) => {
 });
 
 // ===== Test Suite: Network Share Browsing =====
-const TESTSUITE_ROOT = process.env.TESTSUITE_ROOT || String.raw`\\sassrv04\DA_WWCC1\1_Global_Analytics_Consultancy\R1_2\PRODUCT\CE\01_Data\TEST_SUITE`;
+const TESTSUITE_ROOT = process.env.TESTSUITE_ROOT || '/testsuite';
 const CONFIG_DIR = process.env.TESTSUITE_CONFIG_DIR || path.join(__dirname, 'configs');
 
 // Ensure config dir exists
@@ -310,6 +310,20 @@ app.get('/api/testsuite/download', (req, res) => {
   res.download(fullPath);
 });
 
+// Debug endpoint: check testsuite root accessibility
+app.get('/api/testsuite/debug', (req, res) => {
+  try {
+    const exists = fs.existsSync(TESTSUITE_ROOT);
+    let contents = [];
+    if (exists) {
+      contents = fs.readdirSync(TESTSUITE_ROOT).slice(0, 30);
+    }
+    res.json({ root: TESTSUITE_ROOT, exists, contents, configDir: CONFIG_DIR });
+  } catch (err) {
+    res.json({ root: TESTSUITE_ROOT, exists: false, error: err.message });
+  }
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', dataPath: DATA_PATH, testsuiteRoot: TESTSUITE_ROOT });
@@ -321,4 +335,17 @@ app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
   console.log(`Data file location: ${path.resolve(DATA_PATH)}`);
   console.log(`TestSuite root: ${TESTSUITE_ROOT}`);
+  // Check if testsuite root is accessible
+  try {
+    const exists = fs.existsSync(TESTSUITE_ROOT);
+    if (exists) {
+      const dirs = fs.readdirSync(TESTSUITE_ROOT);
+      console.log(`TestSuite root accessible: ${dirs.length} entries found`);
+      console.log(`  Entries: ${dirs.slice(0, 10).join(', ')}${dirs.length > 10 ? '...' : ''}`);
+    } else {
+      console.warn(`⚠️ TestSuite root NOT FOUND: ${TESTSUITE_ROOT}`);
+    }
+  } catch (err) {
+    console.error(`❌ TestSuite root ERROR: ${err.message}`);
+  }
 });
