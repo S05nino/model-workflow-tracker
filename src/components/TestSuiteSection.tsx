@@ -12,7 +12,8 @@ import { useLocalBrowser } from "@/hooks/useLocalBrowser";
 import {
   Globe, Layers, FileArchive, FlaskConical,
   FolderOpen, Download, Loader2, RefreshCw, ChevronRight,
-  AlertCircle, CheckCircle2, FileSpreadsheet, Play, Clock
+  AlertCircle, CheckCircle2, FileSpreadsheet, Play, Clock,
+  Settings, Server
 } from "lucide-react";
 
 type Segment = "consumer" | "business" | "tagger";
@@ -98,6 +99,17 @@ export const TestSuiteSection = () => {
   const [selectedCompanyList, setSelectedCompanyList] = useState<string>("");
 
   const [loadingStep, setLoadingStep] = useState<string | null>(null);
+
+  // Azure Batch settings
+  const [azureBatchVmPath, setAzureBatchVmPath] = useState(
+    String.raw`C:\Users\kq5simmarine\AppData\Local\Categorization.Classifier.NoJWT\Utils\Categorization.Classifier.Batch.AzureDataScience`
+  );
+  const [certThumbprint, setCertThumbprint] = useState("D0E4EB9FB0506DEF78ECF1283319760E980C1736");
+  const [appId, setAppId] = useState("5fd0a365-b1c7-48c4-ba16-bdc211ddad84");
+  const [vmForBench, setVmForBench] = useState<number>(1);
+  const [vmForDev, setVmForDev] = useState<number>(2);
+
+  const VM_OPTIONS = [1, 2, 3, 4];
 
   // Run test state
   const [isRunning, setIsRunning] = useState(false);
@@ -299,12 +311,16 @@ export const TestSuiteSection = () => {
     }
 
     const config: Record<string, unknown> = {
+      root_folder: `C:\\_git\\model-workflow-tracker\\data\\TEST_SUITE`,
+      azure_batch_vm_path: azureBatchVmPath,
+      ServicePrincipal_CertificateThumbprint: certThumbprint,
+      ServicePrincipal_ApplicationId: appId,
       country: selectedCountry,
       segment: selectedSegment,
       value_sign: selectedValueSign,
       sign_pattern: !isTagger ? getSignPattern(selectedSegment, selectedValueSign as ValueSign) : null,
       version,
-      output_folder_name: outputFolderName,
+      output_folder_name: `output/${outputFolderName}`,
       old_model: selectedProdModel,
       new_model: selectedDevModel,
       old_expert_rules: selectedExpertOld && selectedExpertOld !== "__none__" ? selectedExpertOld : null,
@@ -314,6 +330,8 @@ export const TestSuiteSection = () => {
         ? { distribution: fileSelection.accuracy[0] || null, company_list: selectedCompanyList || null }
         : fileSelection,
       data_root: basePath,
+      vm_for_bench: vmForBench,
+      vm_for_dev: vmForDev,
       created_at: new Date().toISOString(),
     };
 
@@ -345,9 +363,33 @@ export const TestSuiteSection = () => {
     toast.success("Configurazione salvata", {
       description: `File: ${configFilename}`,
     });
-    setRunStatus("Configurazione salvata. Avvia dashboard.py per eseguire i test.");
-    addLog("⏳ In attesa che dashboard.py rilevi la configurazione e avvii i test...");
-    addLog(`💡 Esegui: python dashboard.py --watch`);
+
+    // Launch streamlit run dashboard.py
+    addLog("🚀 Avvio streamlit run dashboard.py...");
+    setRunStatus("Avvio streamlit...");
+    try {
+      const API_BASE = import.meta.env.VITE_BACKEND_URL || '';
+      const runRes = await fetch(`${API_BASE}/api/testsuite/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config }),
+      });
+      const runData = await runRes.json();
+      if (runData.ok) {
+        addLog(`✅ Streamlit avviato (PID: ${runData.pid})`, 'success');
+        addLog(`📄 config.json salvato in: ${runData.configPath}`);
+        toast.success("Streamlit avviato!", {
+          description: "dashboard.py in esecuzione",
+        });
+      } else {
+        addLog(`⚠️ Errore avvio streamlit: ${runData.error}`, 'error');
+      }
+    } catch (err: any) {
+      addLog(`⚠️ Errore connessione per avvio streamlit: ${err.message}`, 'error');
+    }
+
+    setRunStatus("Test in esecuzione. In attesa degli output...");
+    addLog("⏳ In attesa degli output...");
     setPollingForOutput(true);
 
     // Poll for output files
@@ -721,6 +763,85 @@ export const TestSuiteSection = () => {
             </CardContent>
           </Card>
 
+          {/* Azure Batch Settings */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Server className="w-4 h-4" />
+                Azure Batch Settings
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-muted-foreground">Azure Batch VM Path</label>
+                <Input
+                  value={azureBatchVmPath}
+                  onChange={(e) => setAzureBatchVmPath(e.target.value)}
+                  placeholder="C:\path\to\batch"
+                  className="font-mono text-xs"
+                />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-muted-foreground">Certificate Thumbprint</label>
+                  <Input
+                    value={certThumbprint}
+                    onChange={(e) => setCertThumbprint(e.target.value)}
+                    placeholder="Thumbprint"
+                    className="font-mono text-xs"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-muted-foreground">Application ID</label>
+                  <Input
+                    value={appId}
+                    onChange={(e) => setAppId(e.target.value)}
+                    placeholder="App ID"
+                    className="font-mono text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* VM selection */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-muted-foreground">VM for Benchmark</label>
+                  <div className="flex gap-3">
+                    {VM_OPTIONS.map(vm => (
+                      <label key={`bench-${vm}`} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                        <Checkbox
+                          checked={vmForBench === vm}
+                          disabled={vmForDev === vm}
+                          onCheckedChange={(checked) => {
+                            if (checked) setVmForBench(vm);
+                          }}
+                        />
+                        <span className={vmForDev === vm ? 'text-muted-foreground line-through' : ''}>{vm}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-muted-foreground">VM for Development</label>
+                  <div className="flex gap-3">
+                    {VM_OPTIONS.map(vm => (
+                      <label key={`dev-${vm}`} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                        <Checkbox
+                          checked={vmForDev === vm}
+                          disabled={vmForBench === vm}
+                          onCheckedChange={(checked) => {
+                            if (checked) setVmForDev(vm);
+                          }}
+                        />
+                        <span className={vmForBench === vm ? 'text-muted-foreground line-through' : ''}>{vm}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Run summary / config recap */}
           <Card className="border-primary/30 bg-primary/5">
             <CardHeader className="pb-3">
@@ -764,6 +885,17 @@ export const TestSuiteSection = () => {
                     </div>
                   </>
                 )}
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mt-3">
+                <div>
+                  <span className="text-muted-foreground block">VM Benchmark</span>
+                  <span className="font-medium">{vmForBench}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">VM Development</span>
+                  <span className="font-medium">{vmForDev}</span>
+                </div>
               </div>
 
               <div className="mt-3 text-xs text-muted-foreground">
