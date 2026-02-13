@@ -1,9 +1,8 @@
 import { useState } from 'react';
-import { useReleasesAdapter as useReleases, useCountriesAdapter as useCountries, useProjectsAdapter as useProjects } from '@/hooks/adapters';
 import { ReleaseCard } from './ReleaseCard';
 import { AssignToReleaseDialog } from './AssignToReleaseDialog';
-import { Segment, TestType, WorkflowStep, SEGMENT_LABELS, TEST_TYPE_LABELS, WORKFLOW_STEPS, getTestTypesForSegment } from '@/types/project';
-import { ReleaseModelIds } from '@/types/release';
+import { Segment, TestType, WorkflowStep, SEGMENT_LABELS, TEST_TYPE_LABELS, WORKFLOW_STEPS, getTestTypesForSegment, Project, CountryConfig } from '@/types/project';
+import { Release, ReleaseModelIds } from '@/types/release';
 import { Package, Globe, MoreVertical, Trash2, Plus, Pause, Play, ChevronRight, CheckCircle2, RefreshCw, Link } from 'lucide-react';
 import { RELEASE_TO_TESTSUITE_COUNTRY, navigateToTestSuite } from '@/lib/countryMapping';
 import { parseISO, compareAsc } from 'date-fns';
@@ -21,32 +20,45 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 
-export function ReleasesSection() {
-  const {
-    releases,
-    addRelease,
-    toggleModelInclusion,
-    confirmModelInRelease,
-    addModelToRelease,
-    deleteRelease,
-    completeRelease,
-    updateReleaseDate,
-    updateModelStep,
-    startModelNewRound,
-    updateModelStatus,
-  } = useReleases();
+interface ReleasesSectionProps {
+  releases: Release[];
+  countries: CountryConfig[];
+  projects: Project[];
+  toggleModelInclusion: (releaseId: string, modelId: string) => void;
+  confirmModelInRelease: (releaseId: string, modelId: string, modelIds: ReleaseModelIds) => void;
+  addModelToRelease: (releaseId: string, country: string, segment: Segment) => void;
+  deleteRelease: (releaseId: string) => void;
+  completeRelease: (releaseId: string) => void;
+  updateReleaseDate: (releaseId: string, newDate: string) => void;
+  updateModelStep: (releaseId: string, modelId: string, step: WorkflowStep) => void;
+  startModelNewRound: (releaseId: string, modelId: string, testType: TestType) => void;
+  updateModelStatus: (releaseId: string, modelId: string, status: string) => void;
+  updateProjectStep: (projectId: string, step: WorkflowStep) => void;
+  startNewRound: (projectId: string, testType: TestType) => void;
+  confirmProject: (projectId: string) => void;
+  updateProjectStatus: (projectId: string, status: Project["status"]) => void;
+  deleteProject: (projectId: string) => void;
+}
 
-  const { countries, addCountry, removeCountry } = useCountries();
-  const {
-    projects,
-    addProject,
-    updateProjectStep,
-    startNewRound,
-    confirmProject,
-    updateProjectStatus,
-    deleteProject,
-  } = useProjects();
-
+export function ReleasesSection({
+  releases,
+  countries,
+  projects,
+  toggleModelInclusion,
+  confirmModelInRelease,
+  addModelToRelease,
+  deleteRelease,
+  completeRelease,
+  updateReleaseDate,
+  updateModelStep,
+  startModelNewRound,
+  updateModelStatus,
+  updateProjectStep,
+  startNewRound,
+  confirmProject,
+  updateProjectStatus,
+  deleteProject,
+}: ReleasesSectionProps) {
   const [assigningProject, setAssigningProject] = useState<{ projectId: string; country: string; segment: Segment } | null>(null);
 
   // Find standalone projects (not in any release)
@@ -57,20 +69,9 @@ export function ReleasesSection() {
     );
   });
 
-  const completedProjects = projects.filter(p => p.status === 'completed');
-
-  const handleAddRelease = (version: string, targetDate: string, models: { country: string; segment: Segment }[]) => {
-    addRelease(version, targetDate, models);
-  };
-
-  const handleAddProject = (country: string, segment: Segment, testType: TestType) => {
-    addProject(country, segment, testType);
-  };
-
   const handleAssignToRelease = (releaseId: string) => {
     if (!assigningProject) return;
     addModelToRelease(releaseId, assigningProject.country, assigningProject.segment);
-    // Optionally delete the standalone project
     deleteProject(assigningProject.projectId);
     setAssigningProject(null);
   };
@@ -105,7 +106,7 @@ export function ReleasesSection() {
                 onComplete={() => completeRelease(release.id)}
                 onUpdateModelStep={(modelId, step) => updateModelStep(release.id, modelId, step)}
                 onStartModelNewRound={(modelId, testType) => startModelNewRound(release.id, modelId, testType)}
-                onUpdateModelStatus={(modelId, status) => updateModelStatus(release.id, modelId, status as any)}
+                onUpdateModelStatus={(modelId, status) => updateModelStatus(release.id, modelId, status)}
               />
             ))}
           </div>
@@ -132,7 +133,7 @@ export function ReleasesSection() {
                 onComplete={() => completeRelease(release.id)}
                 onUpdateModelStep={(modelId, step) => updateModelStep(release.id, modelId, step)}
                 onStartModelNewRound={(modelId, testType) => startModelNewRound(release.id, modelId, testType)}
-                onUpdateModelStatus={(modelId, status) => updateModelStatus(release.id, modelId, status as any)}
+                onUpdateModelStatus={(modelId, status) => updateModelStatus(release.id, modelId, status)}
               />
             ))}
           </div>
@@ -226,7 +227,6 @@ export function ReleasesSection() {
                                   if (currentRound.currentStep < 3) {
                                     const nextStep = (currentRound.currentStep + 1) as WorkflowStep;
                                     updateProjectStep(project.id, nextStep);
-                                    // Navigate to TestSuite when advancing from step 1 to step 2
                                     if (currentRound.currentStep === 1) {
                                       const testSuiteCountry = RELEASE_TO_TESTSUITE_COUNTRY[project.country];
                                       if (testSuiteCountry) {
