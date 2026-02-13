@@ -108,10 +108,10 @@ const Index = () => {
             <div className="flex gap-2">
               <NewProjectDialog onAdd={(country, segment, testType) => {
                 addProject(country, segment, testType);
-              }} countries={countries} />
+              }} countries={countries} projects={projects} releases={releases} />
               <NewReleaseDialog onAdd={(version, targetDate, models) => {
                 addRelease(version, targetDate, models);
-              }} countries={countries} />
+              }} countries={countries} releases={releases} />
             </div>
           </div>
 

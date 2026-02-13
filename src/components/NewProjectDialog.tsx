@@ -22,16 +22,21 @@ import {
   TestType, 
   SEGMENT_LABELS, 
   TEST_TYPE_LABELS,
-  getTestTypesForSegment 
+  getTestTypesForSegment,
+  Project,
 } from '@/types/project';
+import { Release } from '@/types/release';
 import { Plus } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface NewProjectDialogProps {
   onAdd: (country: string, segment: Segment, testType: TestType) => void;
   countries: CountryConfig[];
+  projects?: Project[];
+  releases?: Release[];
 }
 
-export function NewProjectDialog({ onAdd, countries }: NewProjectDialogProps) {
+export function NewProjectDialog({ onAdd, countries, projects = [], releases = [] }: NewProjectDialogProps) {
   const [open, setOpen] = useState(false);
   const [countryCode, setCountryCode] = useState('');
   const [segment, setSegment] = useState<Segment | ''>('');
@@ -54,6 +59,14 @@ export function NewProjectDialog({ onAdd, countries }: NewProjectDialogProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (countryCode && segment && testType) {
+      // Only check standalone projects (non-completed, not in active releases)
+      const isStandaloneDuplicate = projects.some(p =>
+        p.country === countryCode && p.segment === segment && p.status !== 'completed'
+      );
+      if (isStandaloneDuplicate) {
+        toast.error('Esiste già un progetto attivo con questo paese e segmento');
+        return;
+      }
       onAdd(countryCode, segment, testType);
       setCountryCode('');
       setSegment('');

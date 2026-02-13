@@ -61,11 +61,12 @@ export function ReleasesSection({
 }: ReleasesSectionProps) {
   const [assigningProject, setAssigningProject] = useState<{ projectId: string; country: string; segment: Segment } | null>(null);
 
-  // Find standalone projects (not in any release)
+  // Find standalone projects (not in any active release with included models)
   const standaloneProjects = projects.filter(p => {
     if (p.status === 'completed') return false;
+    // Only check non-completed releases with included models
     return !releases.some(r =>
-      r.models.some(m => m.country === p.country && m.segment === p.segment && m.included)
+      !r.completed && r.models.some(m => m.country === p.country && m.segment === p.segment && m.included)
     );
   });
 
