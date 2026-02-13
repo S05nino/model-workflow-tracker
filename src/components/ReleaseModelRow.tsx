@@ -5,6 +5,7 @@ import { WorkflowProgress } from './WorkflowProgress';
 import { ConfirmModelDialog } from './ConfirmModelDialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { RELEASE_TO_TESTSUITE_COUNTRY, navigateToTestSuite } from '@/lib/countryMapping';
 import {
   Collapsible,
   CollapsibleContent,
@@ -65,7 +66,20 @@ export function ReleaseModelRow({
 
   const handleAdvanceStep = () => {
     if (currentRound && currentRound.currentStep < 3) {
-      onUpdateStep((currentRound.currentStep + 1) as WorkflowStep);
+      const nextStep = (currentRound.currentStep + 1) as WorkflowStep;
+      onUpdateStep(nextStep);
+      
+      // If advancing from step 1 (Generazione Modelli) to step 2 (Test Suite), navigate to TestSuite
+      if (currentRound.currentStep === 1) {
+        const testSuiteCountry = RELEASE_TO_TESTSUITE_COUNTRY[model.country];
+        if (testSuiteCountry) {
+          navigateToTestSuite({
+            country: testSuiteCountry,
+            segment: model.segment,
+            valueSign: "OUT",
+          });
+        }
+      }
     }
   };
 
@@ -292,6 +306,7 @@ export function ReleaseModelRow({
           open={confirmingModel}
           onOpenChange={setConfirmingModel}
           countryName={countryName}
+          countryCode={model.country}
           segment={SEGMENT_LABELS[model.segment]}
           onConfirm={onConfirmModel}
         />
