@@ -50,154 +50,7 @@ const writeData = (data) => {
   }
 };
 
-// GET all data from a table
-app.get('/api/:table', (req, res) => {
-  const { table } = req.params;
-  const data = readData();
-  
-  if (!data[table]) {
-    return res.status(404).json({ error: `Table ${table} not found` });
-  }
-  
-  res.json(data[table]);
-});
-
-// GET single item by id
-app.get('/api/:table/:id', (req, res) => {
-  const { table, id } = req.params;
-  const data = readData();
-  
-  if (!data[table]) {
-    return res.status(404).json({ error: `Table ${table} not found` });
-  }
-  
-  const item = data[table].find(item => item.id === id);
-  if (!item) {
-    return res.status(404).json({ error: 'Item not found' });
-  }
-  
-  res.json(item);
-});
-
-// POST - Create new item
-app.post('/api/:table', (req, res) => {
-  const { table } = req.params;
-  const data = readData();
-  
-  if (!data[table]) {
-    return res.status(404).json({ error: `Table ${table} not found` });
-  }
-  
-  const newItem = {
-    ...req.body,
-    id: req.body.id || crypto.randomUUID(),
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  };
-  
-  data[table].push(newItem);
-  
-  if (writeData(data)) {
-    res.status(201).json(newItem);
-  } else {
-    res.status(500).json({ error: 'Failed to save data' });
-  }
-});
-
-// PUT - Update item
-app.put('/api/:table/:id', (req, res) => {
-  const { table, id } = req.params;
-  const data = readData();
-  
-  if (!data[table]) {
-    return res.status(404).json({ error: `Table ${table} not found` });
-  }
-  
-  const index = data[table].findIndex(item => item.id === id);
-  if (index === -1) {
-    return res.status(404).json({ error: 'Item not found' });
-  }
-  
-  data[table][index] = {
-    ...data[table][index],
-    ...req.body,
-    updated_at: new Date().toISOString()
-  };
-  
-  if (writeData(data)) {
-    res.json(data[table][index]);
-  } else {
-    res.status(500).json({ error: 'Failed to save data' });
-  }
-});
-
-// PATCH - Partial update
-app.patch('/api/:table/:id', (req, res) => {
-  const { table, id } = req.params;
-  const data = readData();
-  
-  if (!data[table]) {
-    return res.status(404).json({ error: `Table ${table} not found` });
-  }
-  
-  const index = data[table].findIndex(item => item.id === id);
-  if (index === -1) {
-    return res.status(404).json({ error: 'Item not found' });
-  }
-  
-  data[table][index] = {
-    ...data[table][index],
-    ...req.body,
-    updated_at: new Date().toISOString()
-  };
-  
-  if (writeData(data)) {
-    res.json(data[table][index]);
-  } else {
-    res.status(500).json({ error: 'Failed to save data' });
-  }
-});
-
-// DELETE - Remove item
-app.delete('/api/:table/:id', (req, res) => {
-  const { table, id } = req.params;
-  const data = readData();
-  
-  if (!data[table]) {
-    return res.status(404).json({ error: `Table ${table} not found` });
-  }
-  
-  const index = data[table].findIndex(item => item.id === id);
-  if (index === -1) {
-    return res.status(404).json({ error: 'Item not found' });
-  }
-  
-  data[table].splice(index, 1);
-  
-  if (writeData(data)) {
-    res.json({ success: true });
-  } else {
-    res.status(500).json({ error: 'Failed to save data' });
-  }
-});
-
-// Special endpoint for password validation
-app.post('/api/validate-password', (req, res) => {
-  const { password } = req.body;
-  const data = readData();
-  
-  const config = data.app_config.find(c => c.key === 'shared_password');
-  if (!config) {
-    // If no password set, accept any password and set it
-    data.app_config.push({ key: 'shared_password', value: password });
-    writeData(data);
-    return res.json({ valid: true });
-  }
-  
-  res.json({ valid: config.value === password });
-});
-
-// ===== Test Suite: Local Folder Browsing =====
+// ===== Test Suite routes (MUST be before generic /api/:table) =====
 const TESTSUITE_ROOT = process.env.TESTSUITE_ROOT || path.join(__dirname, '..', '..', 'data', 'TEST_SUITE');
 const CONFIG_DIR = process.env.TESTSUITE_CONFIG_DIR || path.join(__dirname, 'configs');
 
@@ -208,31 +61,24 @@ if (fs.existsSync(TESTSUITE_ROOT)) {
   console.log(`[startup] TEST_SUITE contents: ${topLevel.join(', ')}`);
 }
 
-// Ensure config dir exists
 if (!fs.existsSync(CONFIG_DIR)) {
   fs.mkdirSync(CONFIG_DIR, { recursive: true });
 }
 
-// Health check endpoint for diagnostics
+// Health check for testsuite
 app.get('/api/testsuite/health', (req, res) => {
   const exists = fs.existsSync(TESTSUITE_ROOT);
   let contents = [];
   if (exists) {
     try { contents = fs.readdirSync(TESTSUITE_ROOT); } catch (e) {}
   }
-  res.json({
-    testsuite_root: TESTSUITE_ROOT,
-    exists,
-    contents,
-    config_dir: CONFIG_DIR,
-  });
+  res.json({ testsuite_root: TESTSUITE_ROOT, exists, contents, config_dir: CONFIG_DIR });
 });
 
-// List directories and files under a relative path in the network share
+// List directories and files
 app.get('/api/testsuite/list', (req, res) => {
   const relPath = req.query.path || '';
   const fullPath = path.join(TESTSUITE_ROOT, relPath);
-
   console.log(`[testsuite/list] path=${relPath} -> ${fullPath}`);
 
   try {
@@ -262,16 +108,14 @@ app.get('/api/testsuite/list', (req, res) => {
   }
 });
 
-// Save test config JSON locally
+// Save test config JSON
 app.post('/api/testsuite/config', (req, res) => {
   const { filename, config } = req.body;
   if (!filename || !config) {
     return res.status(400).json({ error: 'Missing filename or config' });
   }
-
   const configPath = path.join(CONFIG_DIR, filename);
   console.log(`[testsuite/config] Saving config: ${configPath}`);
-
   try {
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
     res.json({ ok: true, path: configPath });
@@ -294,11 +138,10 @@ app.get('/api/testsuite/configs', (req, res) => {
   }
 });
 
-// Check output folder for results
+// Check output folder
 app.get('/api/testsuite/output', (req, res) => {
   const relPath = req.query.path || '';
   const fullPath = path.join(TESTSUITE_ROOT, relPath);
-
   try {
     if (!fs.existsSync(fullPath)) {
       return res.json({ files: [] });
@@ -320,16 +163,131 @@ app.get('/api/testsuite/output', (req, res) => {
   }
 });
 
-// Download a file from the network share
+// Download a file
 app.get('/api/testsuite/download', (req, res) => {
   const relPath = req.query.path || '';
   const fullPath = path.join(TESTSUITE_ROOT, relPath);
-
   if (!fs.existsSync(fullPath)) {
     return res.status(404).json({ error: 'File not found' });
   }
-
   res.download(fullPath);
+});
+
+// Special endpoint for password validation
+app.post('/api/validate-password', (req, res) => {
+  const { password } = req.body;
+  const data = readData();
+  const config = data.app_config.find(c => c.key === 'shared_password');
+  if (!config) {
+    data.app_config.push({ key: 'shared_password', value: password });
+    writeData(data);
+    return res.json({ valid: true });
+  }
+  res.json({ valid: config.value === password });
+});
+
+// ===== Generic CRUD routes (AFTER specific routes) =====
+
+// GET all data from a table
+app.get('/api/:table', (req, res) => {
+  const { table } = req.params;
+  const data = readData();
+  if (!data[table]) {
+    return res.status(404).json({ error: `Table ${table} not found` });
+  }
+  res.json(data[table]);
+});
+
+// GET single item by id
+app.get('/api/:table/:id', (req, res) => {
+  const { table, id } = req.params;
+  const data = readData();
+  if (!data[table]) {
+    return res.status(404).json({ error: `Table ${table} not found` });
+  }
+  const item = data[table].find(item => item.id === id);
+  if (!item) {
+    return res.status(404).json({ error: 'Item not found' });
+  }
+  res.json(item);
+});
+
+// POST - Create new item
+app.post('/api/:table', (req, res) => {
+  const { table } = req.params;
+  const data = readData();
+  if (!data[table]) {
+    return res.status(404).json({ error: `Table ${table} not found` });
+  }
+  const newItem = {
+    ...req.body,
+    id: req.body.id || crypto.randomUUID(),
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+  data[table].push(newItem);
+  if (writeData(data)) {
+    res.status(201).json(newItem);
+  } else {
+    res.status(500).json({ error: 'Failed to save data' });
+  }
+});
+
+// PUT - Update item
+app.put('/api/:table/:id', (req, res) => {
+  const { table, id } = req.params;
+  const data = readData();
+  if (!data[table]) {
+    return res.status(404).json({ error: `Table ${table} not found` });
+  }
+  const index = data[table].findIndex(item => item.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'Item not found' });
+  }
+  data[table][index] = { ...data[table][index], ...req.body, updated_at: new Date().toISOString() };
+  if (writeData(data)) {
+    res.json(data[table][index]);
+  } else {
+    res.status(500).json({ error: 'Failed to save data' });
+  }
+});
+
+// PATCH - Partial update
+app.patch('/api/:table/:id', (req, res) => {
+  const { table, id } = req.params;
+  const data = readData();
+  if (!data[table]) {
+    return res.status(404).json({ error: `Table ${table} not found` });
+  }
+  const index = data[table].findIndex(item => item.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'Item not found' });
+  }
+  data[table][index] = { ...data[table][index], ...req.body, updated_at: new Date().toISOString() };
+  if (writeData(data)) {
+    res.json(data[table][index]);
+  } else {
+    res.status(500).json({ error: 'Failed to save data' });
+  }
+});
+
+// DELETE - Remove item
+app.delete('/api/:table/:id', (req, res) => {
+  const { table, id } = req.params;
+  const data = readData();
+  if (!data[table]) {
+    return res.status(404).json({ error: `Table ${table} not found` });
+  }
+  const index = data[table].findIndex(item => item.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'Item not found' });
+  }
+  data[table].splice(index, 1);
+  if (writeData(data)) {
+    res.json({ success: true });
+  } else {
+    res.status(500).json({ error: 'Failed to save data' });
+  }
 });
 
 // Health check
