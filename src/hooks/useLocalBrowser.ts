@@ -17,7 +17,7 @@ interface ListResult {
   files: LocalFile[];
 }
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
 
 export function useLocalBrowser() {
   const [loading, setLoading] = useState(false);
