@@ -227,10 +227,48 @@ export function useProjectsLocal() {
     });
   };
 
+  const addProjectFromModel = async (country: string, segment: Segment, status: string, currentRound: number, rounds: WorkflowRound[]) => {
+    const now = new Date().toISOString();
+    const id = generateId();
+    const projectRounds = rounds.length > 0 ? rounds : [{
+      id: generateId(),
+      roundNumber: 1,
+      testType: 'test-suite' as TestType,
+      currentStep: 1 as WorkflowStep,
+      startedAt: now,
+    }];
+
+    const newProject: DBProject = {
+      id,
+      country,
+      segment,
+      test_type: projectRounds[0]?.testType || 'test-suite',
+      current_round: currentRound || 1,
+      status: status || 'in-progress',
+      created_at: now,
+      updated_at: now,
+      rounds: projectRounds,
+      awaiting_confirmation: status === 'waiting',
+    };
+
+    try {
+      const response = await fetch(`${API_URL}/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newProject),
+      });
+      if (!response.ok) throw new Error('Failed to create');
+      await fetchProjects();
+    } catch (error) {
+      console.error('Error creating project from model:', error);
+    }
+  };
+
   return {
     projects,
     loading,
     addProject,
+    addProjectFromModel,
     updateProjectStep,
     startNewRound,
     confirmProject,
