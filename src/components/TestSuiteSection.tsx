@@ -364,9 +364,9 @@ export const TestSuiteSection = () => {
       description: `File: ${configFilename}`,
     });
 
-    // Launch streamlit run dashboard.py
-    addLog("🚀 Avvio streamlit run dashboard.py...");
-    setRunStatus("Avvio streamlit...");
+    // Save config.json to host via backend and open Streamlit
+    addLog("🚀 Salvataggio config.json e avvio Streamlit...");
+    setRunStatus("Salvataggio config.json...");
     try {
       const API_BASE = import.meta.env.VITE_BACKEND_URL || '';
       const runRes = await fetch(`${API_BASE}/api/testsuite/run`, {
@@ -376,59 +376,28 @@ export const TestSuiteSection = () => {
       });
       const runData = await runRes.json();
       if (runData.ok) {
-        addLog(`✅ Streamlit avviato (PID: ${runData.pid})`, 'success');
-        addLog(`📄 config.json salvato in: ${runData.configPath}`);
-        toast.success("Streamlit avviato!", {
-          description: "dashboard.py in esecuzione",
+        addLog(`✅ config.json salvato in: ${runData.configPath}`, 'success');
+        
+        // Open Streamlit in a new browser tab
+        const streamlitUrl = 'http://localhost:8501';
+        addLog(`🌐 Apertura Streamlit: ${streamlitUrl}`);
+        window.open(streamlitUrl, '_blank');
+        
+        toast.success("config.json salvato!", {
+          description: "Streamlit aperto in una nuova scheda. Assicurati che sia in esecuzione: streamlit run dashboard.py",
         });
+        setRunStatus("config.json salvato. Streamlit aperto in nuova scheda.");
+        addLog("✅ Controlla la scheda Streamlit per l'andamento dei test.", 'success');
       } else {
-        addLog(`⚠️ Errore avvio streamlit: ${runData.error}`, 'error');
+        addLog(`⚠️ Errore: ${runData.error}`, 'error');
+        toast.error("Errore nel salvataggio della configurazione");
       }
     } catch (err: any) {
-      addLog(`⚠️ Errore connessione per avvio streamlit: ${err.message}`, 'error');
+      addLog(`⚠️ Errore connessione: ${err.message}`, 'error');
+      toast.error("Errore di connessione al backend");
     }
 
-    setRunStatus("Test in esecuzione. In attesa degli output...");
-    addLog("⏳ In attesa degli output...");
-    setPollingForOutput(true);
-
-    // Poll for output files
-    const outputRelPath = `${basePath}/output/${outputFolderName}`;
-    const MAX_POLLS = 720;
-    let count = 0;
-
-    const pollInterval = setInterval(async () => {
-      count++;
-      setPollCount(count);
-      setPollProgress(Math.min((count / MAX_POLLS) * 100, 99));
-
-      try {
-        const outputFiles = await browser.checkOutput(outputRelPath);
-        if (outputFiles.length > 0) {
-          clearInterval(pollInterval);
-          setPollingForOutput(false);
-          setIsRunning(false);
-          setPollProgress(100);
-          setRunStatus("Test completati! Output disponibili.");
-          addLog(`🎉 Test completati! ${outputFiles.length} file di output trovati.`, 'success');
-          setOutputFiles(outputFiles.map(f => ({ name: f.name, key: f.key, size: f.size })));
-          toast.success("Output dei test disponibili!", {
-            description: `${outputFiles.length} file trovati`,
-          });
-        } else if (count % 6 === 0) {
-          addLog(`🔄 Polling #${count} - nessun output ancora (${Math.floor(count * 10 / 60)} min trascorsi)`);
-        }
-      } catch (pollErr: any) {
-        addLog(`⚠️ Errore polling: ${pollErr.message}`, 'error');
-      }
-
-      if (count >= MAX_POLLS) {
-        clearInterval(pollInterval);
-        setPollingForOutput(false);
-        setRunStatus("Polling interrotto dopo 2 ore.");
-        addLog("⏰ Polling interrotto dopo 2 ore.", 'error');
-      }
-    }, 10000);
+    setIsRunning(false);
   };
 
   return (
