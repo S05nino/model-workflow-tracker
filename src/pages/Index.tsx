@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { useProjectsAdapter as useProjects, useReleasesAdapter as useReleases, useCountriesAdapter as useCountries } from '@/hooks/adapters';
 import { ManageCountriesDialog } from '@/components/ManageCountriesDialog';
 import { ReleasesSection } from '@/components/ReleasesSection';
@@ -7,6 +8,7 @@ import { DashboardStats } from '@/components/DashboardStats';
 import { NewProjectDialog } from '@/components/NewProjectDialog';
 import { NewReleaseDialog } from '@/components/NewReleaseDialog';
 import { Segment } from '@/types/project';
+import { TestSuitePrefillEvent } from '@/lib/countryMapping';
 import { Brain, Workflow, Download } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -17,6 +19,19 @@ const Index = () => {
   const { projects, addProject } = useProjects();
   const { releases, addRelease } = useReleases();
   const { countries, addCountry, removeCountry } = useCountries();
+  const [activeTab, setActiveTab] = useState("releases");
+  const [testSuitePrefill, setTestSuitePrefill] = useState<TestSuitePrefillEvent | null>(null);
+
+  // Listen for navigate-to-testsuite events
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<TestSuitePrefillEvent>).detail;
+      setTestSuitePrefill(detail);
+      setActiveTab("testsuite");
+    };
+    window.addEventListener('navigate-to-testsuite', handler);
+    return () => window.removeEventListener('navigate-to-testsuite', handler);
+  }, []);
 
   return (
     <div className="min-h-screen bg-background">
@@ -64,7 +79,7 @@ const Index = () => {
         <DashboardStats projects={projects} />
 
         {/* Single Tabs wrapper */}
-        <Tabs defaultValue="releases" className="animate-fade-in mt-6" style={{ animationDelay: '0.1s' }}>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="animate-fade-in mt-6" style={{ animationDelay: '0.1s' }}>
           <div className="flex items-center justify-between mb-4">
             <TabsList>
               <TabsTrigger value="releases">Rilasci</TabsTrigger>
@@ -86,7 +101,7 @@ const Index = () => {
 
           <TabsContent value="testsuite">
             <ErrorBoundary fallbackTitle="Errore nella TestSuite">
-              <TestSuiteSection />
+              <TestSuiteSection prefill={testSuitePrefill} onPrefillConsumed={() => setTestSuitePrefill(null)} />
             </ErrorBoundary>
           </TabsContent>
         </Tabs>

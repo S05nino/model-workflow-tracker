@@ -5,6 +5,7 @@ import { AssignToReleaseDialog } from './AssignToReleaseDialog';
 import { Segment, TestType, WorkflowStep, SEGMENT_LABELS, TEST_TYPE_LABELS, WORKFLOW_STEPS, getTestTypesForSegment } from '@/types/project';
 import { ReleaseModelIds } from '@/types/release';
 import { Package, Globe, MoreVertical, Trash2, Plus, Pause, Play, ChevronRight, CheckCircle2, RefreshCw, Link } from 'lucide-react';
+import { RELEASE_TO_TESTSUITE_COUNTRY, navigateToTestSuite } from '@/lib/countryMapping';
 import { parseISO, compareAsc } from 'date-fns';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -223,7 +224,19 @@ export function ReleasesSection() {
                               <Button
                                 onClick={() => {
                                   if (currentRound.currentStep < 3) {
-                                    updateProjectStep(project.id, (currentRound.currentStep + 1) as WorkflowStep);
+                                    const nextStep = (currentRound.currentStep + 1) as WorkflowStep;
+                                    updateProjectStep(project.id, nextStep);
+                                    // Navigate to TestSuite when advancing from step 1 to step 2
+                                    if (currentRound.currentStep === 1) {
+                                      const testSuiteCountry = RELEASE_TO_TESTSUITE_COUNTRY[project.country];
+                                      if (testSuiteCountry) {
+                                        navigateToTestSuite({
+                                          country: testSuiteCountry,
+                                          segment: project.segment,
+                                          valueSign: "OUT",
+                                        });
+                                      }
+                                    }
                                   }
                                 }}
                                 className="flex-1 gap-2"

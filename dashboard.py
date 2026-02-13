@@ -67,7 +67,19 @@ def safe_listdir(path):
 def get_batch_dir():
     """Trova automaticamente la cartella data/batch relativa al TestSuite."""
     import suite_tests
-    suite_root = os.path.dirname(os.path.abspath(suite_tests.__file__))
+    suite_file = getattr(suite_tests, '__file__', None)
+    if suite_file is None:
+        # Fallback: use the sys.path entry where suite_tests was found
+        for p in sys.path:
+            candidate = os.path.join(p, "suite_tests", "data", "batch")
+            if os.path.isdir(candidate):
+                return candidate
+            candidate2 = os.path.join(p, "data", "batch")
+            if os.path.isdir(candidate2):
+                return candidate2
+        st.warning("⚠️ Impossibile determinare la cartella batch automaticamente.")
+        return None
+    suite_root = os.path.dirname(os.path.abspath(suite_file))
     return os.path.join(suite_root, "data", "batch")
 
 
@@ -117,6 +129,9 @@ def copy_latest_outputs(output_folder: str, segment: str, report_type: str,
 
     # Copia batch CSV
     batch_dir = get_batch_dir()
+    if batch_dir is None:
+        st.warning("⚠️ Cartella batch non trovata, skip copia batch CSV.")
+        return
     pattern = "*categorized.csv" if segment in ["Consumer", "Business"] else "*tagged.csv"
     files = glob.glob(os.path.join(batch_dir, pattern))
 

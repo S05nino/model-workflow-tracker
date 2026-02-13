@@ -8,12 +8,14 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toast } from "sonner";
 import { useState, useEffect, useCallback } from "react";
 import { useLocalBrowser } from "@/hooks/useLocalBrowser";
+import { TestSuitePrefillEvent } from "@/lib/countryMapping";
 import {
   Globe, Layers, FileArchive, FlaskConical,
-  FolderOpen, Download, Loader2, RefreshCw, ChevronRight,
+  FolderOpen, Download, Loader2, RefreshCw, ChevronRight, ChevronDown,
   AlertCircle, CheckCircle2, FileSpreadsheet, Play, Clock,
   Settings, Server
 } from "lucide-react";
@@ -59,7 +61,12 @@ function filterBySign(files: string[], pattern: string): string[] {
   return files.filter(f => f.includes(`_${pattern}_`));
 }
 
-export const TestSuiteSection = () => {
+interface TestSuiteSectionProps {
+  prefill?: TestSuitePrefillEvent | null;
+  onPrefillConsumed?: () => void;
+}
+
+export const TestSuiteSection = ({ prefill, onPrefillConsumed }: TestSuiteSectionProps) => {
   const browser = useLocalBrowser();
 
   // Navigation state (no date selector)
@@ -121,7 +128,9 @@ export const TestSuiteSection = () => {
   const [pollProgress, setPollProgress] = useState(0);
   const [pollCount, setPollCount] = useState(0);
   const [outputReports, setOutputReports] = useState<ParsedReport[]>([]);
-
+  const [expandedOutputs, setExpandedOutputs] = useState<Set<string>>(new Set());
+  const [showValueSignPrompt, setShowValueSignPrompt] = useState(false);
+  const [completedValueSign, setCompletedValueSign] = useState<ValueSign | null>(null);
   const segments = selectedCountry ? (COUNTRY_SEGMENTS[selectedCountry] || []) : [];
 
   // When country changes, reset
@@ -159,6 +168,22 @@ export const TestSuiteSection = () => {
     setSelectedExpertOld(filteredEROld.length === 1 ? filteredEROld[0] : "");
     setSelectedExpertNew(filteredERNew.length === 1 ? filteredERNew[0] : "");
   }, [selectedValueSign, allProdModels, allDevModels, allExpertRulesOld, allExpertRulesNew, selectedSegment]);
+
+  // Handle prefill from release workflow
+  useEffect(() => {
+    if (!prefill) return;
+    // Set country first, then segment and value sign will cascade via other effects
+    setSelectedCountry(prefill.country);
+    // We need a slight delay so the country effect fires and loads segments
+    const timer = setTimeout(() => {
+      setSelectedSegment(prefill.segment);
+      setTimeout(() => {
+        setSelectedValueSign(prefill.valueSign);
+        onPrefillConsumed?.();
+      }, 100);
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [prefill]);
 
   const resetSelections = () => {
     setAllProdModels([]);
@@ -327,6 +352,12 @@ export const TestSuiteSection = () => {
 
           // Parse and display reports
           await loadOutputReports(reportFiles, outputPath);
+          
+          // Prompt for other value sign
+          if (selectedValueSign && !isTagger) {
+            setCompletedValueSign(selectedValueSign as ValueSign);
+            setShowValueSignPrompt(true);
+          }
           return;
         }
       } catch (err) {
@@ -366,6 +397,20 @@ export const TestSuiteSection = () => {
     setOutputReports(reports);
     if (reports.length > 0) {
       toast.success(`${reports.length} report caricati e visualizzati!`);
+    }
+  };
+
+  const loadSingleReport = async (file: { name: string; key: string }) => {
+    const API_BASE = import.meta.env.VITE_BACKEND_URL || '';
+    try {
+      const downloadUrl = `${API_BASE}/api/testsuite/download?path=${encodeURIComponent(file.key)}`;
+      const res = await fetch(downloadUrl);
+      const blob = await res.blob();
+      const fileObj = new File([blob], file.name, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const parsed = await parseReportFile(fileObj);
+      setOutputReports(prev => [...prev, parsed]);
+    } catch (err) {
+      addLog(`⚠️ Errore parsing ${file.name}: ${(err as Error).message}`, 'error');
     }
   };
 
@@ -1021,7 +1066,55 @@ export const TestSuiteSection = () => {
             </CardContent>
           </Card>
 
-          {/* Output files */}
+          {/* Value Sign Prompt */}
+          {showValueSignPrompt && completedValueSign && (
+            <Card className="border-warning/50 bg-warning/5">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-foreground">
+                      Test {completedValueSign} completato! Vuoi eseguire anche il test per l'altro value sign ({completedValueSign === "OUT" ? "IN" : "OUT"})?
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Country e segmento verranno mantenuti.
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowValueSignPrompt(false)}
+                    >
+                      No, grazie
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setShowValueSignPrompt(false);
+                        setCompletedValueSign(null);
+                        // Reset run state but keep country/segment
+                        setIsRunning(false);
+                        setRunStatus(null);
+                        setRunLogs([]);
+                        setPollingForOutput(false);
+                        setPollProgress(0);
+                        setPollCount(0);
+                        setOutputFiles([]);
+                        setOutputReports([]);
+                        setExpandedOutputs(new Set());
+                        // Don't auto-set value sign - let user choose
+                        setSelectedValueSign("");
+                      }}
+                    >
+                      Sì, cambia Value Sign
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Output files with expandable reports */}
           {outputFiles.length > 0 && (
             <Card>
               <CardHeader className="pb-3">
@@ -1031,51 +1124,68 @@ export const TestSuiteSection = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-1">
-                  {outputFiles.map(file => (
-                    <div
-                      key={file.key}
-                      className="flex items-center justify-between p-2 rounded-md hover:bg-muted/50 group"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <FileSpreadsheet className="w-4 h-4 text-muted-foreground shrink-0" />
-                        <span className="font-mono text-xs truncate">{file.name}</span>
-                        <Badge variant="outline" className="text-xs shrink-0">
-                          {(file.size / 1024).toFixed(0)} KB
-                        </Badge>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => handleDownloadFile(file.key, file.name)}
+                <div className="space-y-2">
+                  {outputFiles.map((file, fileIdx) => {
+                    const isExpanded = expandedOutputs.has(file.key);
+                    const matchingReport = outputReports.find(r => r.fileName === file.name);
+                    
+                    return (
+                      <Collapsible
+                        key={file.key}
+                        open={isExpanded}
+                        onOpenChange={(open) => {
+                          setExpandedOutputs(prev => {
+                            const next = new Set(prev);
+                            if (open) {
+                              next.add(file.key);
+                              // If not yet parsed, load it
+                              if (!matchingReport) {
+                                loadSingleReport(file);
+                              }
+                            } else {
+                              next.delete(file.key);
+                            }
+                            return next;
+                          });
+                        }}
                       >
-                        <Download className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  ))}
+                        <CollapsibleTrigger className="w-full">
+                          <div className="flex items-center justify-between p-2 rounded-md hover:bg-muted/50">
+                            <div className="flex items-center gap-2 min-w-0">
+                              {isExpanded ? <ChevronDown className="w-4 h-4 shrink-0" /> : <ChevronRight className="w-4 h-4 shrink-0" />}
+                              <FileSpreadsheet className="w-4 h-4 text-muted-foreground shrink-0" />
+                              <span className="font-mono text-xs truncate">{file.name}</span>
+                              <Badge variant="outline" className="text-xs shrink-0">
+                                {(file.size / 1024).toFixed(0)} KB
+                              </Badge>
+                            </div>
+                          </div>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="pl-8 pb-4 pt-2">
+                            {matchingReport ? (
+                              <ReportViewer
+                                report={matchingReport}
+                                onRemove={() => {
+                                  setExpandedOutputs(prev => {
+                                    const next = new Set(prev);
+                                    next.delete(file.key);
+                                    return next;
+                                  });
+                                }}
+                              />
+                            ) : (
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                Caricamento report...
+                              </div>
+                            )}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    );
+                  })}
                 </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Parsed Report Viewers */}
-          {outputReports.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <FileSpreadsheet className="w-4 h-4 text-primary" />
-                  Report Generati ({outputReports.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {outputReports.map((report, i) => (
-                  <ReportViewer
-                    key={`${report.fileName}-${i}`}
-                    report={report}
-                    onRemove={() => setOutputReports(prev => prev.filter((_, idx) => idx !== i))}
-                  />
-                ))}
               </CardContent>
             </Card>
           )}
