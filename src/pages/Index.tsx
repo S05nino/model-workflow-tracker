@@ -19,6 +19,7 @@ const Index = () => {
   const {
     projects,
     addProject,
+    addProjectFromModel,
     updateProjectStep,
     startNewRound,
     confirmProject,
@@ -134,6 +135,7 @@ const Index = () => {
               confirmProject={confirmProject}
               updateProjectStatus={updateProjectStatus}
               deleteProject={deleteProject}
+              addProjectFromModel={addProjectFromModel}
             />
           </TabsContent>
 

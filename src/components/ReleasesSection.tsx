@@ -38,6 +38,7 @@ interface ReleasesSectionProps {
   confirmProject: (projectId: string) => void;
   updateProjectStatus: (projectId: string, status: Project["status"]) => void;
   deleteProject: (projectId: string) => void;
+  addProjectFromModel?: (country: string, segment: Segment, status: string, currentRound: number, rounds: any[]) => void;
 }
 
 export function ReleasesSection({
@@ -58,7 +59,26 @@ export function ReleasesSection({
   confirmProject,
   updateProjectStatus,
   deleteProject,
+  addProjectFromModel,
 }: ReleasesSectionProps) {
+
+  // When excluding a model from a release, create a standalone project preserving its state
+  const handleToggleInclusion = (releaseId: string, modelId: string) => {
+    const release = releases.find(r => r.id === releaseId);
+    if (!release) return;
+    const model = release.models.find(m => m.id === modelId);
+    if (model && model.included && addProjectFromModel) {
+      addProjectFromModel(
+        model.country,
+        model.segment,
+        (model.status as string) || 'in-progress',
+        model.currentRound || 1,
+        model.rounds || [],
+      );
+    }
+    toggleModelInclusion(releaseId, modelId);
+  };
+
   const [assigningProject, setAssigningProject] = useState<{ projectId: string; country: string; segment: Segment } | null>(null);
 
   // Find standalone projects (not in any active release with included models)
@@ -99,7 +119,7 @@ export function ReleasesSection({
                 key={release.id}
                 release={release}
                 countries={countries}
-                onToggleInclusion={(modelId) => toggleModelInclusion(release.id, modelId)}
+                onToggleInclusion={(modelId) => handleToggleInclusion(release.id, modelId)}
                 onConfirmModel={(modelId, modelIds) => confirmModelInRelease(release.id, modelId, modelIds)}
                 onAddModel={(country, segment) => addModelToRelease(release.id, country, segment)}
                 onUpdateDate={(newDate) => updateReleaseDate(release.id, newDate)}
@@ -126,7 +146,7 @@ export function ReleasesSection({
                 key={release.id}
                 release={release}
                 countries={countries}
-                onToggleInclusion={(modelId) => toggleModelInclusion(release.id, modelId)}
+                onToggleInclusion={(modelId) => handleToggleInclusion(release.id, modelId)}
                 onConfirmModel={(modelId, modelIds) => confirmModelInRelease(release.id, modelId, modelIds)}
                 onAddModel={(country, segment) => addModelToRelease(release.id, country, segment)}
                 onUpdateDate={(newDate) => updateReleaseDate(release.id, newDate)}

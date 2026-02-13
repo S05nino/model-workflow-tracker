@@ -244,9 +244,35 @@ export function useProjects() {
     saveProjects(updated);
   };
 
+  const addProjectFromModel = (country: string, segment: Segment, status: string, currentRound: number, rounds: WorkflowRound[]) => {
+    const now = new Date().toISOString();
+    const projectRounds = rounds.length > 0 ? rounds : [{
+      id: generateId(),
+      roundNumber: 1,
+      testType: 'test-suite' as TestType,
+      currentStep: 1 as WorkflowStep,
+      startedAt: now,
+    }];
+
+    const newProject: Project = {
+      id: generateId(),
+      country,
+      segment,
+      status: (status || 'in-progress') as Project['status'],
+      currentRound: currentRound || 1,
+      rounds: projectRounds,
+      createdAt: now,
+      updatedAt: now,
+      awaitingConfirmation: status === 'waiting',
+    };
+
+    saveProjects([...projects, newProject]);
+  };
+
   return {
     projects,
     addProject,
+    addProjectFromModel,
     updateProjectStep,
     startNewRound,
     confirmProject,
