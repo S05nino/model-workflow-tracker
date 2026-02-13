@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { useState, useEffect, useCallback } from "react";
 import { useLocalBrowser } from "@/hooks/useLocalBrowser";
 import {
-  Globe, Layers, Calendar, FileArchive, FlaskConical,
+  Globe, Layers, FileArchive, FlaskConical,
   FolderOpen, Download, Loader2, RefreshCw, ChevronRight,
   AlertCircle, CheckCircle2, FileSpreadsheet, Play, Clock
 } from "lucide-react";
@@ -24,6 +24,25 @@ interface FileSelection {
   precision: string[];
   stability: string[];
 }
+
+/** Country → available segments */
+const COUNTRY_SEGMENTS: Record<string, Segment[]> = {
+  "at-AT": ["consumer", "tagger"],
+  "nl-BE": ["consumer", "business"],
+  "cs-CZ": ["consumer", "business"],
+  "de-DE": ["consumer", "tagger"],
+  "es-ES": ["consumer", "business", "tagger"],
+  "fr-FR": ["consumer", "business", "tagger"],
+  "en-GB": ["consumer", "business", "tagger"],
+  "en-IN": ["consumer", "business", "tagger"],
+  "en-IE": ["consumer", "business"],
+  "it-IT": ["consumer", "business", "tagger"],
+  "es-MX": ["tagger"],
+  "pl-PL": ["consumer"],
+  "pt-PT": ["consumer"],
+};
+
+const COUNTRIES = Object.keys(COUNTRY_SEGMENTS).sort();
 
 /** Build the segment_sign pattern from segment name + value sign */
 function getSignPattern(segment: string, valueSign: ValueSign): string {
@@ -40,16 +59,12 @@ function filterBySign(files: string[], pattern: string): string[] {
 export const TestSuiteSection = () => {
   const browser = useLocalBrowser();
 
-  // Navigation state
-  const [countries, setCountries] = useState<string[]>([]);
+  // Navigation state (no date selector)
   const [selectedCountry, setSelectedCountry] = useState<string>("");
-  const [segments, setSegments] = useState<string[]>([]);
   const [selectedSegment, setSelectedSegment] = useState<string>("");
-  const [dates, setDates] = useState<string[]>([]);
-  const [selectedDate, setSelectedDate] = useState<string>("");
   const [selectedValueSign, setSelectedValueSign] = useState<ValueSign | "">("");
 
-  // Model state - raw (all files) and filtered
+  // Model state
   const [allProdModels, setAllProdModels] = useState<string[]>([]);
   const [allDevModels, setAllDevModels] = useState<string[]>([]);
   const [prodModels, setProdModels] = useState<string[]>([]);
@@ -57,7 +72,7 @@ export const TestSuiteSection = () => {
   const [selectedProdModel, setSelectedProdModel] = useState<string>("");
   const [selectedDevModel, setSelectedDevModel] = useState<string>("");
 
-  // Expert rules state - raw and filtered
+  // Expert rules state
   const [allExpertRulesOld, setAllExpertRulesOld] = useState<string[]>([]);
   const [allExpertRulesNew, setAllExpertRulesNew] = useState<string[]>([]);
   const [expertRulesOld, setExpertRulesOld] = useState<string[]>([]);
@@ -92,54 +107,22 @@ export const TestSuiteSection = () => {
   const [pollProgress, setPollProgress] = useState(0);
   const [pollCount, setPollCount] = useState(0);
 
-  // Load countries on mount
-  useEffect(() => {
-    loadCountries();
-  }, []);
+  const segments = selectedCountry ? (COUNTRY_SEGMENTS[selectedCountry] || []) : [];
 
-  const loadCountries = async () => {
-    setLoadingStep("countries");
-    const result = await browser.listCountries();
-    setCountries(result.folders.map(f => f.name).sort());
-    setLoadingStep(null);
-  };
-
-  // When country changes, load segments
+  // When country changes, reset
   useEffect(() => {
-    if (!selectedCountry) return;
     setSelectedSegment("");
-    setSelectedDate("");
     setSelectedValueSign("");
     resetSelections();
-    (async () => {
-      setLoadingStep("segments");
-      const result = await browser.listSegments(selectedCountry);
-      setSegments(result.folders.map(f => f.name).sort());
-      setLoadingStep(null);
-    })();
   }, [selectedCountry]);
 
-  // When segment changes, load dates
+  // When segment changes, load contents
   useEffect(() => {
     if (!selectedCountry || !selectedSegment) return;
-    setSelectedDate("");
     setSelectedValueSign("");
     resetSelections();
-    (async () => {
-      setLoadingStep("dates");
-      const result = await browser.listDates(selectedCountry, selectedSegment);
-      setDates(result.folders.map(f => f.name).sort().reverse());
-      setLoadingStep(null);
-    })();
+    loadContents();
   }, [selectedCountry, selectedSegment]);
-
-  // When date changes, load models + samples + expert rules
-  useEffect(() => {
-    if (!selectedCountry || !selectedSegment || !selectedDate) return;
-    setSelectedValueSign("");
-    resetSelections();
-    loadDateContents();
-  }, [selectedCountry, selectedSegment, selectedDate]);
 
   // When valueSign changes, filter models and rules
   useEffect(() => {
@@ -156,7 +139,6 @@ export const TestSuiteSection = () => {
     setExpertRulesOld(filteredEROld);
     setExpertRulesNew(filteredERNew);
 
-    // Auto-select if only one match
     setSelectedProdModel(filteredProd.length === 1 ? filteredProd[0] : "");
     setSelectedDevModel(filteredDev.length === 1 ? filteredDev[0] : "");
     setSelectedExpertOld(filteredEROld.length === 1 ? filteredEROld[0] : "");
@@ -183,35 +165,33 @@ export const TestSuiteSection = () => {
     setSelectedCompanyList("");
   };
 
-  const loadDateContents = async () => {
+  const basePath = `${selectedCountry}/${selectedSegment}`;
+  const isTagger = selectedSegment.toLowerCase() === "tagger";
+
+  const loadContents = async () => {
     setLoadingStep("contents");
     const country = selectedCountry;
     const segment = selectedSegment;
-    const date = selectedDate;
+    const base = `${country}/${segment}`;
 
-    const isTagger = segment.toLowerCase() === "tagger";
-
-    // Load in parallel
     const promises: Promise<void>[] = [];
 
     // Sample files
     promises.push(
-      browser.listSubfolder(country, segment, date, "Sample").then(result => {
+      browser.listPath(`${base}/sample`).then(result => {
         const tsv = result.files.filter(f => f.name.endsWith(".tsv.gz")).map(f => f.name);
         setSampleFiles(tsv);
-        if (!isTagger) {
-          // nothing extra
-        } else {
+        if (segment.toLowerCase() === "tagger") {
           const lists = result.files.filter(f => f.name.endsWith("list_companies.xlsx")).map(f => f.name);
           setCompanyLists(lists);
         }
       })
     );
 
-    if (!isTagger) {
+    if (segment.toLowerCase() !== "tagger") {
       // Prod models
       promises.push(
-        browser.listModelSubfolder(country, segment, date, "prod").then(result => {
+        browser.listPath(`${base}/model/prod`).then(result => {
           const zips = result.files.filter(f => f.name.endsWith(".zip")).map(f => f.name);
           setAllProdModels(zips);
           setProdModels(zips);
@@ -220,31 +200,29 @@ export const TestSuiteSection = () => {
 
       // Dev models
       promises.push(
-        browser.listModelSubfolder(country, segment, date, "develop").then(result => {
+        browser.listPath(`${base}/model/develop`).then(result => {
           const zips = result.files.filter(f => f.name.endsWith(".zip")).map(f => f.name);
           setAllDevModels(zips);
           setDevModels(zips);
         })
       );
 
-      // Expert rules - check for old/new structure
+      // Expert rules
       promises.push(
         (async () => {
-          const erResult = await browser.listModelSubfolder(country, segment, date, "expertrules");
+          const erResult = await browser.listPath(`${base}/model/expertrules`);
           const hasOldNew = erResult.folders.some(f => f.name === "old" || f.name === "new");
           setHasOldNewStructure(hasOldNew);
 
           if (hasOldNew) {
             const [oldResult, newResult] = await Promise.all([
-              browser.listPath(`${country}/${segment}/${date}/model/expertrules/old`),
-              browser.listPath(`${country}/${segment}/${date}/model/expertrules/new`),
+              browser.listPath(`${base}/model/expertrules/old`),
+              browser.listPath(`${base}/model/expertrules/new`),
             ]);
-            const oldFiles = oldResult.files.map(f => f.name);
-            const newFiles = newResult.files.map(f => f.name);
-            setAllExpertRulesOld(oldFiles);
-            setAllExpertRulesNew(newFiles);
-            setExpertRulesOld(oldFiles);
-            setExpertRulesNew(newFiles);
+            setAllExpertRulesOld(oldResult.files.map(f => f.name));
+            setAllExpertRulesNew(newResult.files.map(f => f.name));
+            setExpertRulesOld(oldResult.files.map(f => f.name));
+            setExpertRulesNew(newResult.files.map(f => f.name));
           } else {
             const zips = erResult.files.filter(f => f.name.endsWith(".zip")).map(f => f.name);
             setAllExpertRulesOld(zips);
@@ -255,9 +233,9 @@ export const TestSuiteSection = () => {
         })()
       );
     } else {
-      // Tagger: models are directly in model/
+      // Tagger: models directly in model/
       promises.push(
-        browser.listSubfolder(country, segment, date, "model").then(result => {
+        browser.listPath(`${base}/model`).then(result => {
           const zips = result.files.filter(f => f.name.endsWith(".zip")).map(f => f.name);
           setAllProdModels(zips);
           setAllDevModels(zips);
@@ -269,7 +247,8 @@ export const TestSuiteSection = () => {
 
     // Output files
     promises.push(
-      browser.listSubfolder(country, segment, date, "output").then(result => {
+      browser.listPath(`${base}/output`).then(result => {
+        // List output subfolders (each is a run)
         setOutputFiles(result.files.map(f => ({ name: f.name, key: f.key, size: f.size })));
       })
     );
@@ -294,8 +273,7 @@ export const TestSuiteSection = () => {
     toast.success(`Download avviato: ${name}`);
   };
 
-  const isTagger = selectedSegment.toLowerCase() === "tagger";
-  const hasFullSelection = selectedCountry && selectedSegment && selectedDate && (isTagger || selectedValueSign);
+  const hasFullSelection = selectedCountry && selectedSegment && (isTagger || selectedValueSign);
 
   const today = new Date();
   const dateStr = `${String(today.getFullYear()).slice(2)}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
@@ -323,7 +301,6 @@ export const TestSuiteSection = () => {
     const config: Record<string, unknown> = {
       country: selectedCountry,
       segment: selectedSegment,
-      date: selectedDate,
       value_sign: selectedValueSign,
       sign_pattern: !isTagger ? getSignPattern(selectedSegment, selectedValueSign as ValueSign) : null,
       version,
@@ -336,19 +313,19 @@ export const TestSuiteSection = () => {
       sample_files: isTagger
         ? { distribution: fileSelection.accuracy[0] || null, company_list: selectedCompanyList || null }
         : fileSelection,
-      data_root: `${selectedCountry}/${selectedSegment}/${selectedDate}`,
+      data_root: basePath,
       created_at: new Date().toISOString(),
     };
 
     setIsRunning(true);
-    setRunStatus("Salvataggio configurazione locale...");
+    setRunStatus("Salvataggio configurazione...");
     addLog("📝 Preparazione configurazione test...");
-    addLog(`📍 Country: ${selectedCountry}, Segmento: ${selectedSegment}, Data: ${selectedDate}, Value Sign: ${selectedValueSign}`);
+    addLog(`📍 Country: ${selectedCountry}, Segmento: ${selectedSegment}, Value Sign: ${selectedValueSign}`);
     addLog(`📦 Old Model: ${selectedProdModel}`);
     addLog(`📦 New Model: ${selectedDevModel}`);
 
     const configFilename = `config_${outputFolderName}.json`;
-    addLog(`💾 Salvataggio config locale: ${configFilename}`);
+    addLog(`💾 Salvataggio config: ${configFilename}`);
 
     const result = await browser.saveConfig(configFilename, config);
 
@@ -370,12 +347,12 @@ export const TestSuiteSection = () => {
     });
     setRunStatus("Configurazione salvata. Avvia dashboard.py per eseguire i test.");
     addLog("⏳ In attesa che dashboard.py rilevi la configurazione e avvii i test...");
-    addLog(`💡 Esegui: python dashboard.py --config ${result.path}`);
+    addLog(`💡 Esegui: python dashboard.py --watch`);
     setPollingForOutput(true);
 
-    // Start polling for output files on network share
-    const outputRelPath = `${selectedCountry}/${selectedSegment}/${selectedDate}/output/${outputFolderName}`;
-    const MAX_POLLS = 720; // 2 hours at 10s intervals
+    // Poll for output files
+    const outputRelPath = `${basePath}/output/${outputFolderName}`;
+    const MAX_POLLS = 720;
     let count = 0;
 
     const pollInterval = setInterval(async () => {
@@ -397,7 +374,6 @@ export const TestSuiteSection = () => {
             description: `${outputFiles.length} file trovati`,
           });
         } else if (count % 6 === 0) {
-          // Log every ~60s
           addLog(`🔄 Polling #${count} - nessun output ancora (${Math.floor(count * 10 / 60)} min trascorsi)`);
         }
       } catch (pollErr: any) {
@@ -407,7 +383,7 @@ export const TestSuiteSection = () => {
       if (count >= MAX_POLLS) {
         clearInterval(pollInterval);
         setPollingForOutput(false);
-        setRunStatus("Polling interrotto dopo 2 ore. Ricarica manualmente per verificare l'output.");
+        setRunStatus("Polling interrotto dopo 2 ore.");
         addLog("⏰ Polling interrotto dopo 2 ore.", 'error');
       }
     }, 10000);
@@ -423,16 +399,18 @@ export const TestSuiteSection = () => {
             Test Suite Dashboard
           </h2>
           <p className="text-sm text-muted-foreground">
-            Sfoglia i dati sulla rete, seleziona modelli e file per i test
+            Seleziona country e segmento, popola le cartelle con modelli e sample, poi lancia i test
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={loadCountries} disabled={!!loadingStep}>
-          <RefreshCw className={`w-4 h-4 mr-2 ${loadingStep ? 'animate-spin' : ''}`} />
-          Ricarica
-        </Button>
+        {selectedCountry && selectedSegment && (
+          <Button variant="outline" size="sm" onClick={loadContents} disabled={!!loadingStep}>
+            <RefreshCw className={`w-4 h-4 mr-2 ${loadingStep ? 'animate-spin' : ''}`} />
+            Ricarica
+          </Button>
+        )}
       </div>
 
-      {/* Step 1: Country + Segment + Date selectors */}
+      {/* Step 1: Country + Segment + Value Sign */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -441,16 +419,16 @@ export const TestSuiteSection = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Country */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-muted-foreground">Country</label>
               <Select value={selectedCountry} onValueChange={setSelectedCountry}>
                 <SelectTrigger>
-                  <SelectValue placeholder={loadingStep === "countries" ? "Caricamento..." : "Seleziona country"} />
+                  <SelectValue placeholder="Seleziona country" />
                 </SelectTrigger>
                 <SelectContent>
-                  {countries.map(c => (
+                  {COUNTRIES.map(c => (
                     <SelectItem key={c} value={c}>{c}</SelectItem>
                   ))}
                 </SelectContent>
@@ -466,30 +444,11 @@ export const TestSuiteSection = () => {
                 disabled={!selectedCountry}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={loadingStep === "segments" ? "Caricamento..." : "Seleziona segmento"} />
+                  <SelectValue placeholder="Seleziona segmento" />
                 </SelectTrigger>
                 <SelectContent>
                   {segments.map(s => (
                     <SelectItem key={s} value={s}>{s}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Date */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-muted-foreground">Data</label>
-              <Select
-                value={selectedDate}
-                onValueChange={setSelectedDate}
-                disabled={!selectedSegment}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={loadingStep === "dates" ? "Caricamento..." : "Seleziona data"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {dates.map(d => (
-                    <SelectItem key={d} value={d}>{d}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -501,7 +460,7 @@ export const TestSuiteSection = () => {
               <Select
                 value={selectedValueSign}
                 onValueChange={(v) => setSelectedValueSign(v as ValueSign)}
-                disabled={!selectedDate || isTagger}
+                disabled={!selectedSegment || isTagger}
               >
                 <SelectTrigger>
                   <SelectValue placeholder={isTagger ? "N/A" : "Seleziona IN/OUT"} />
@@ -526,19 +485,13 @@ export const TestSuiteSection = () => {
           {selectedCountry && (
             <div className="mt-3 flex items-center gap-1 text-xs text-muted-foreground">
               <FolderOpen className="w-3 h-3" />
-              <span>\\sassrv04\...\TEST_SUITE</span>
+              <span>data/TEST_SUITE</span>
               <ChevronRight className="w-3 h-3" />
               <span className="text-foreground font-medium">{selectedCountry}</span>
               {selectedSegment && (
                 <>
                   <ChevronRight className="w-3 h-3" />
                   <span className="text-foreground font-medium">{selectedSegment}</span>
-                </>
-              )}
-              {selectedDate && (
-                <>
-                  <ChevronRight className="w-3 h-3" />
-                  <span className="text-foreground font-medium">{selectedDate}</span>
                 </>
               )}
             </div>
@@ -554,7 +507,7 @@ export const TestSuiteSection = () => {
         </div>
       )}
 
-      {/* Step 2: Models & Rules (only when date selected) */}
+      {/* Step 2: Models & Rules */}
       {hasFullSelection && loadingStep !== "contents" && (
         <>
           {/* Models */}
@@ -585,7 +538,7 @@ export const TestSuiteSection = () => {
                   </Select>
                   {prodModels.length === 0 && (
                     <p className="text-xs text-muted-foreground flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3" /> Nessun modello trovato
+                      <AlertCircle className="w-3 h-3" /> Nessun modello trovato nella cartella
                     </p>
                   )}
                 </div>
@@ -608,7 +561,7 @@ export const TestSuiteSection = () => {
                   </Select>
                   {devModels.length === 0 && (
                     <p className="text-xs text-muted-foreground flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3" /> Nessun modello trovato
+                      <AlertCircle className="w-3 h-3" /> Nessun modello trovato nella cartella
                     </p>
                   )}
                 </div>
@@ -642,9 +595,7 @@ export const TestSuiteSection = () => {
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-muted-foreground">
-                      Expert Rules (OLD)
-                    </label>
+                    <label className="text-sm font-medium text-muted-foreground">Expert Rules (OLD)</label>
                     <Select value={selectedExpertOld} onValueChange={setSelectedExpertOld}>
                       <SelectTrigger>
                         <SelectValue placeholder="Seleziona (opzionale)" />
@@ -661,9 +612,7 @@ export const TestSuiteSection = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-muted-foreground">
-                      Expert Rules (NEW)
-                    </label>
+                    <label className="text-sm font-medium text-muted-foreground">Expert Rules (NEW)</label>
                     <Select value={selectedExpertNew} onValueChange={setSelectedExpertNew}>
                       <SelectTrigger>
                         <SelectValue placeholder="Seleziona (opzionale)" />
@@ -724,7 +673,6 @@ export const TestSuiteSection = () => {
                   Nessun file .tsv.gz trovato nella cartella sample
                 </p>
               ) : isTagger ? (
-                /* Tagger: single distribution file */
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-muted-foreground">Distribution Data (.tsv.gz)</label>
                   <Select
@@ -744,7 +692,6 @@ export const TestSuiteSection = () => {
                   </Select>
                 </div>
               ) : (
-                /* Consumer/Business: multi-select per category */
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {(["accuracy", "anomalies", "precision", "stability"] as const).map(category => (
                     <div key={category} className="space-y-2">
@@ -780,7 +727,7 @@ export const TestSuiteSection = () => {
               <CardTitle className="text-base">Riepilogo Configurazione</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div>
                   <span className="text-muted-foreground block">Country</span>
                   <span className="font-medium">{selectedCountry || "—"}</span>
@@ -788,10 +735,6 @@ export const TestSuiteSection = () => {
                 <div>
                   <span className="text-muted-foreground block">Segmento</span>
                   <span className="font-medium">{selectedSegment || "—"}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground block">Data</span>
-                  <span className="font-medium">{selectedDate || "—"}</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground block">Value Sign</span>
@@ -823,8 +766,12 @@ export const TestSuiteSection = () => {
                 )}
               </div>
 
+              <div className="mt-3 text-xs text-muted-foreground">
+                Output folder: <code className="font-mono bg-muted px-1 rounded">{basePath}/output/{outputFolderName}/</code>
+              </div>
+
               {!isTagger && (
-                <div className="mt-3 text-xs text-muted-foreground">
+                <div className="mt-1 text-xs text-muted-foreground">
                   File selezionati: Accuracy ({fileSelection.accuracy.length}), Anomalie ({fileSelection.anomalies.length}), Precision ({fileSelection.precision.length}), Stabilità ({fileSelection.stability.length})
                 </div>
               )}
@@ -846,14 +793,14 @@ export const TestSuiteSection = () => {
                   {isRunning ? "In esecuzione..." : "🚀 Run Tests"}
                 </Button>
 
-              {runStatus && (
-                <div className={`flex items-center gap-2 text-sm ${pollingForOutput ? 'text-amber-600' : runStatus.includes('Errore') ? 'text-destructive' : 'text-emerald-600'}`}>
-                  {pollingForOutput && <Clock className="w-4 h-4 animate-pulse" />}
-                  {!pollingForOutput && runStatus.includes("completati") && <CheckCircle2 className="w-4 h-4" />}
-                  {runStatus.includes("Errore") && <AlertCircle className="w-4 h-4" />}
-                  {runStatus}
-                </div>
-              )}
+                {runStatus && (
+                  <div className={`flex items-center gap-2 text-sm ${pollingForOutput ? 'text-amber-600' : runStatus.includes('Errore') ? 'text-destructive' : 'text-emerald-600'}`}>
+                    {pollingForOutput && <Clock className="w-4 h-4 animate-pulse" />}
+                    {!pollingForOutput && runStatus.includes("completati") && <CheckCircle2 className="w-4 h-4" />}
+                    {runStatus.includes("Errore") && <AlertCircle className="w-4 h-4" />}
+                    {runStatus}
+                  </div>
+                )}
               </div>
 
               {/* Progress bar during polling */}
@@ -865,7 +812,7 @@ export const TestSuiteSection = () => {
                   </div>
                   <Progress value={pollProgress} className="h-2" />
                   <p className="text-xs text-muted-foreground">
-                    Output atteso in: <code className="font-mono bg-muted px-1 rounded">output/{outputFolderName}/</code>
+                    Output atteso in: <code className="font-mono bg-muted px-1 rounded">{basePath}/output/{outputFolderName}/</code>
                   </p>
                 </div>
               )}
