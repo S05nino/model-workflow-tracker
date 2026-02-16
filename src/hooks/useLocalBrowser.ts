@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
 interface LocalFolder {
   name: string;
@@ -17,7 +18,18 @@ interface ListResult {
   files: LocalFile[];
 }
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+async function callS3Function(params: Record<string, string>): Promise<Response> {
+  const qs = new URLSearchParams(params).toString();
+  return fetch(`${SUPABASE_URL}/functions/v1/s3-testsuite?${qs}`, {
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+    },
+  });
+}
 
 export function useLocalBrowser() {
   const [loading, setLoading] = useState(false);
@@ -27,7 +39,7 @@ export function useLocalBrowser() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/testsuite/list?path=${encodeURIComponent(relPath)}`);
+      const res = await callS3Function({ action: 'list', path: relPath });
       if (!res.ok) {
         const errBody = await res.text();
         throw new Error(`List failed (${res.status}): ${errBody}`);
@@ -65,35 +77,9 @@ export function useLocalBrowser() {
     [listPath]
   );
 
-  const saveConfig = useCallback(async (filename: string, config: Record<string, unknown>): Promise<{ ok: boolean; error?: string; path?: string }> => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/testsuite/config`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename, config }),
-      });
-      if (!res.ok) {
-        const errBody = await res.text();
-        const errMsg = `Config save failed (${res.status}): ${errBody}`;
-        setError(errMsg);
-        return { ok: false, error: errMsg };
-      }
-      const data = await res.json();
-      return { ok: true, path: data.path };
-    } catch (e: any) {
-      const errMsg = `Errore di rete: ${e.message}`;
-      setError(errMsg);
-      return { ok: false, error: errMsg };
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   const checkOutput = useCallback(async (relPath: string): Promise<LocalFile[]> => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/testsuite/output?path=${encodeURIComponent(relPath)}`);
+      const res = await callS3Function({ action: 'list', path: relPath });
       if (!res.ok) return [];
       const data = await res.json();
       return data.files || [];
@@ -103,7 +89,18 @@ export function useLocalBrowser() {
   }, []);
 
   const getDownloadUrl = useCallback((relPath: string): string => {
-    return `${BACKEND_URL}/api/testsuite/download?path=${encodeURIComponent(relPath)}`;
+    // Returns a URL that will give a presigned S3 URL via the edge function
+    return `${SUPABASE_URL}/functions/v1/s3-testsuite?action=download&path=${encodeURIComponent(relPath)}`;
+  }, []);
+
+  const downloadFile = useCallback(async (relPath: string): Promise<Blob | null> => {
+    try {
+      const res = await callS3Function({ action: 'download-content', path: relPath });
+      if (!res.ok) return null;
+      return await res.blob();
+    } catch {
+      return null;
+    }
   }, []);
 
   return {
@@ -115,8 +112,8 @@ export function useLocalBrowser() {
     listDates,
     listSubfolder,
     listModelSubfolder,
-    saveConfig,
     checkOutput,
     getDownloadUrl,
+    downloadFile,
   };
 }
