@@ -109,6 +109,10 @@ export const TestSuiteSection = ({ prefill, onPrefillConsumed }: TestSuiteSectio
 
   const [loadingStep, setLoadingStep] = useState<string | null>(null);
 
+  // Local execution settings
+  const [cePythonPath, setCePythonPath] = useState(String.raw`C:\_git\CategorizationEnginePython`);
+  const [testsuiteRoot, setTestsuiteRoot] = useState(String.raw`C:\_git\model-workflow-tracker\data\TEST_SUITE`);
+
   // Azure Batch settings
   const [azureBatchVmPath, setAzureBatchVmPath] = useState(
     String.raw`C:\Users\kq5simmarine\AppData\Local\Categorization.Classifier.NoJWT\Utils\Categorization.Classifier.Batch.AzureDataScience`
@@ -443,6 +447,8 @@ export const TestSuiteSection = ({ prefill, onPrefillConsumed }: TestSuiteSectio
     }
 
     const config: Record<string, unknown> = {
+      ce_python_path: cePythonPath,
+      testsuite_root: testsuiteRoot,
       s3_bucket: "s3-crif-studio-wwcc1mnt-de-prd-datalake",
       s3_prefix: "CategorizationEngineTestSuite/TEST_SUITE/",
       azure_batch_vm_path: azureBatchVmPath,
@@ -475,29 +481,24 @@ export const TestSuiteSection = ({ prefill, onPrefillConsumed }: TestSuiteSectio
     addLog(`📦 Old Model: ${selectedProdModel}`);
     addLog(`📦 New Model: ${selectedDevModel}`);
 
-    addLog("🚀 Invocazione Lambda per esecuzione test...");
-    setRunStatus("Avvio test su AWS Lambda...");
+    addLog("🚀 Avvio esecuzione locale TestRunner...");
+    setRunStatus("Avvio test in locale...");
 
     try {
-      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-      const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-      const runRes = await fetch(`${SUPABASE_URL}/functions/v1/run-testsuite`, {
+      const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+      const runRes = await fetch(`${BACKEND_URL}/api/testsuite/run`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ config }),
       });
       const runData = await runRes.json();
 
       if (runData.ok) {
-        addLog(`✅ Test avviati su Lambda!`, 'success');
+        addLog(`✅ TestRunner avviato (PID: ${runData.pid})`, 'success');
         toast.success("Test avviati!", {
-          description: "L'esecuzione è in corso su AWS. I risultati appariranno automaticamente.",
+          description: "L'esecuzione è in corso in locale. I risultati appariranno su S3.",
         });
-        setRunStatus("Test in esecuzione su AWS Lambda...");
+        setRunStatus("Test in esecuzione locale...");
 
         // Start polling for output files on S3
         addLog("⏳ Polling per output su S3...", 'info');
@@ -512,7 +513,7 @@ export const TestSuiteSection = ({ prefill, onPrefillConsumed }: TestSuiteSectio
       }
     } catch (err: any) {
       addLog(`⚠️ Errore connessione: ${err.message}`, 'error');
-      toast.error("Errore di connessione");
+      toast.error("Errore di connessione al backend locale");
       setRunStatus(`Errore: ${err.message}`);
     }
 
@@ -848,6 +849,36 @@ export const TestSuiteSection = ({ prefill, onPrefillConsumed }: TestSuiteSectio
                   ))}
                 </div>
               )}
+            </CardContent>
+          </Card>
+
+          {/* Local Execution Settings */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Settings className="w-4 h-4" />
+                Esecuzione Locale
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-muted-foreground">Path CategorizationEnginePython</label>
+                <Input
+                  value={cePythonPath}
+                  onChange={(e) => setCePythonPath(e.target.value)}
+                  placeholder="C:\_git\CategorizationEnginePython"
+                  className="font-mono text-xs"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-muted-foreground">Path TEST_SUITE locale (per esecuzione)</label>
+                <Input
+                  value={testsuiteRoot}
+                  onChange={(e) => setTestsuiteRoot(e.target.value)}
+                  placeholder="C:\_git\model-workflow-tracker\data\TEST_SUITE"
+                  className="font-mono text-xs"
+                />
+              </div>
             </CardContent>
           </Card>
 
