@@ -125,27 +125,61 @@ app.post('/api/testsuite/config', (req, res) => {
   }
 });
 
-// Run tests: save config.json at project root and spawn streamlit
+// Run tests: spawn handler.py locally with config
 app.post('/api/testsuite/run', (req, res) => {
   const { config } = req.body;
   if (!config) {
     return res.status(400).json({ error: 'Missing config' });
   }
 
-  // Save config.json to the project root (mounted volume -> host filesystem)
-  const projectRoot = process.env.PROJECT_ROOT || path.join(__dirname, '..', '..');
-  const configPath = path.join(projectRoot, 'config.json');
-
-  console.log(`[testsuite/run] Saving config.json to: ${configPath}`);
-
-  try {
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-    console.log(`[testsuite/run] config.json saved successfully`);
-    res.json({ ok: true, configPath });
-  } catch (err) {
-    console.error('[testsuite/run] Error saving config:', err.message);
-    return res.status(500).json({ error: `Failed to save config: ${err.message}` });
+  const cePath = config.ce_python_path;
+  if (!cePath) {
+    return res.status(400).json({ error: 'Missing ce_python_path in config' });
   }
+
+  // Save config to temp file
+  const configPath = path.join(CONFIG_DIR, `run_${Date.now()}.json`);
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+  console.log(`[testsuite/run] Config saved: ${configPath}`);
+
+  // Determine handler.py location (lambda/ folder at project root)
+  const projectRoot = process.env.PROJECT_ROOT || path.join(__dirname, '..', '..');
+  const handlerPath = path.join(projectRoot, 'lambda', 'handler.py');
+
+  if (!fs.existsSync(handlerPath)) {
+    return res.status(500).json({ error: `handler.py not found at ${handlerPath}` });
+  }
+
+  // Build PYTHONPATH to include CategorizationEnginePython and CETestSuite
+  const pythonPath = [
+    cePath,
+    path.join(cePath, 'CategorizationEngineTests', 'CETestSuite'),
+  ].join(process.platform === 'win32' ? ';' : ':');
+
+  console.log(`[testsuite/run] Spawning python handler.py with PYTHONPATH=${pythonPath}`);
+
+  const { spawn } = require('child_process');
+  const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+  const proc = spawn(pythonCmd, [handlerPath, '--config', configPath], {
+    env: { ...process.env, PYTHONPATH: pythonPath },
+    cwd: projectRoot,
+  });
+
+  // Immediately respond that the process started
+  res.json({ ok: true, pid: proc.pid, configPath });
+
+  // Log stdout/stderr
+  proc.stdout.on('data', (data) => {
+    console.log(`[testsuite/run:stdout] ${data.toString().trim()}`);
+  });
+  proc.stderr.on('data', (data) => {
+    console.error(`[testsuite/run:stderr] ${data.toString().trim()}`);
+  });
+  proc.on('close', (code) => {
+    console.log(`[testsuite/run] Process exited with code ${code}`);
+    // Clean up config file
+    try { fs.unlinkSync(configPath); } catch {}
+  });
 });
 
 // List saved configs
