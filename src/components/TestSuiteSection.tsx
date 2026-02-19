@@ -109,10 +109,6 @@ export const TestSuiteSection = ({ prefill, onPrefillConsumed }: TestSuiteSectio
 
   const [loadingStep, setLoadingStep] = useState<string | null>(null);
 
-  // Local execution settings
-  const [cePythonPath, setCePythonPath] = useState(String.raw`C:\_git\CategorizationEnginePython`);
-  const [testsuiteRoot, setTestsuiteRoot] = useState(String.raw`C:\_git\model-workflow-tracker\data\TEST_SUITE`);
-
   // Azure Batch settings
   const [azureBatchVmPath, setAzureBatchVmPath] = useState(
     String.raw`C:\Users\kq5simmarine\AppData\Local\Categorization.Classifier.NoJWT\Utils\Categorization.Classifier.Batch.AzureDataScience`
@@ -312,24 +308,9 @@ export const TestSuiteSection = ({ prefill, onPrefillConsumed }: TestSuiteSectio
   };
 
   const handleDownloadFile = async (key: string, name: string) => {
-    try {
-      // Get presigned URL from edge function then open it
-      const res = await fetch(browser.getDownloadUrl(key), {
-        headers: {
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-      });
-      const data = await res.json();
-      if (data.url) {
-        window.open(data.url, "_blank");
-        toast.success(`Download avviato: ${name}`);
-      } else {
-        toast.error("Errore nel download");
-      }
-    } catch {
-      toast.error("Errore nel download del file");
-    }
+    const url = browser.getDownloadUrl(key);
+    window.open(url, "_blank");
+    toast.success(`Download avviato: ${name}`);
   };
 
   const hasFullSelection = selectedCountry && selectedSegment && (isTagger || selectedValueSign);
@@ -344,8 +325,7 @@ export const TestSuiteSection = ({ prefill, onPrefillConsumed }: TestSuiteSectio
   };
 
   const pollForOutputs = async () => {
-    const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-    const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+    const API_BASE = import.meta.env.VITE_BACKEND_URL || '';
     const outputPath = `${basePath}/output/${outputFolderName}`;
     const maxPolls = 360; // 60 min at 10s intervals
     let count = 0;
@@ -356,9 +336,7 @@ export const TestSuiteSection = ({ prefill, onPrefillConsumed }: TestSuiteSectio
       setPollProgress(Math.min((count / maxPolls) * 100, 99));
 
       try {
-        const res = await fetch(`${SUPABASE_URL}/functions/v1/s3-testsuite?action=list&path=${encodeURIComponent(outputPath)}`, {
-          headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-        });
+        const res = await fetch(`${API_BASE}/api/testsuite/output?path=${encodeURIComponent(outputPath)}`);
         const data = await res.json();
         const reportFiles = (data.files || []).filter((f: any) => f.name.startsWith('report') && f.name.endsWith('.xlsx'));
 
@@ -399,13 +377,15 @@ export const TestSuiteSection = ({ prefill, onPrefillConsumed }: TestSuiteSectio
     poll();
   };
 
-  const loadOutputReports = async (files: { name: string; key: string }[], _outputPath: string) => {
+  const loadOutputReports = async (files: { name: string; key: string }[], outputPath: string) => {
+    const API_BASE = import.meta.env.VITE_BACKEND_URL || '';
     const reports: ParsedReport[] = [];
 
     for (const file of files) {
       try {
-        const blob = await browser.downloadFile(file.key);
-        if (!blob) throw new Error("Download failed");
+        const downloadUrl = `${API_BASE}/api/testsuite/download?path=${encodeURIComponent(file.key)}`;
+        const res = await fetch(downloadUrl);
+        const blob = await res.blob();
         const fileObj = new File([blob], file.name, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const parsed = await parseReportFile(fileObj);
         reports.push(parsed);
@@ -421,9 +401,11 @@ export const TestSuiteSection = ({ prefill, onPrefillConsumed }: TestSuiteSectio
   };
 
   const loadSingleReport = async (file: { name: string; key: string }) => {
+    const API_BASE = import.meta.env.VITE_BACKEND_URL || '';
     try {
-      const blob = await browser.downloadFile(file.key);
-      if (!blob) throw new Error("Download failed");
+      const downloadUrl = `${API_BASE}/api/testsuite/download?path=${encodeURIComponent(file.key)}`;
+      const res = await fetch(downloadUrl);
+      const blob = await res.blob();
       const fileObj = new File([blob], file.name, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const parsed = await parseReportFile(fileObj);
       setOutputReports(prev => [...prev, parsed]);
@@ -447,10 +429,7 @@ export const TestSuiteSection = ({ prefill, onPrefillConsumed }: TestSuiteSectio
     }
 
     const config: Record<string, unknown> = {
-      ce_python_path: cePythonPath,
-      testsuite_root: testsuiteRoot,
-      s3_bucket: "s3-crif-studio-wwcc1mnt-de-prd-datalake",
-      s3_prefix: "CategorizationEngineTestSuite/TEST_SUITE/",
+      root_folder: `C:\\_git\\model-workflow-tracker\\data\\TEST_SUITE`,
       azure_batch_vm_path: azureBatchVmPath,
       ServicePrincipal_CertificateThumbprint: certThumbprint,
       ServicePrincipal_ApplicationId: appId,
@@ -475,46 +454,67 @@ export const TestSuiteSection = ({ prefill, onPrefillConsumed }: TestSuiteSectio
     };
 
     setIsRunning(true);
-    setRunStatus("Invio configurazione...");
+    setRunStatus("Salvataggio configurazione...");
     addLog("📝 Preparazione configurazione test...");
     addLog(`📍 Country: ${selectedCountry}, Segmento: ${selectedSegment}, Value Sign: ${selectedValueSign}`);
     addLog(`📦 Old Model: ${selectedProdModel}`);
     addLog(`📦 New Model: ${selectedDevModel}`);
 
-    addLog("🚀 Avvio esecuzione locale TestRunner...");
-    setRunStatus("Avvio test in locale...");
+    const configFilename = `config_${outputFolderName}.json`;
+    addLog(`💾 Salvataggio config: ${configFilename}`);
 
+    const result = await browser.saveConfig(configFilename, config);
+
+    if (!result.ok) {
+      const errMsg = result.error || "Errore sconosciuto nel salvataggio della configurazione";
+      addLog(`❌ Errore salvataggio configurazione: ${errMsg}`, 'error');
+      toast.error("Errore nel salvataggio della configurazione", {
+        description: errMsg,
+        duration: 10000,
+      });
+      setIsRunning(false);
+      setRunStatus(`Errore: ${errMsg}`);
+      return;
+    }
+
+    addLog(`✅ Configurazione salvata: ${result.path}`, 'success');
+    toast.success("Configurazione salvata", {
+      description: `File: ${configFilename}`,
+    });
+
+    // Save config.json to host via backend
+    addLog("🚀 Salvataggio config.json...");
+    setRunStatus("Salvataggio config.json...");
     try {
-      const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
-      const runRes = await fetch(`${BACKEND_URL}/api/testsuite/run`, {
+      const API_BASE = import.meta.env.VITE_BACKEND_URL || '';
+      const runRes = await fetch(`${API_BASE}/api/testsuite/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ config }),
       });
       const runData = await runRes.json();
-
       if (runData.ok) {
-        addLog(`✅ TestRunner avviato (PID: ${runData.pid})`, 'success');
-        toast.success("Test avviati!", {
-          description: "L'esecuzione è in corso in locale. I risultati appariranno su S3.",
+        addLog(`✅ config.json salvato in: ${runData.configPath}`, 'success');
+        
+        toast.success("config.json salvato!", {
+          description: "Avvia streamlit run dashboard.py nel terminale, poi i test partiranno automaticamente.",
         });
-        setRunStatus("Test in esecuzione locale...");
+        setRunStatus("config.json salvato. Avvia streamlit run dashboard.py nel terminale.");
+        addLog("ℹ️ Avvia: streamlit run dashboard.py", 'info');
 
-        // Start polling for output files on S3
-        addLog("⏳ Polling per output su S3...", 'info');
+        // Start polling for output files
+        addLog("⏳ Polling per output nella cartella...", 'info');
         setPollingForOutput(true);
         setPollCount(0);
         setPollProgress(0);
         pollForOutputs();
       } else {
         addLog(`⚠️ Errore: ${runData.error}`, 'error');
-        toast.error("Errore nell'avvio dei test", { description: runData.error });
-        setRunStatus(`Errore: ${runData.error}`);
+        toast.error("Errore nel salvataggio della configurazione");
       }
     } catch (err: any) {
       addLog(`⚠️ Errore connessione: ${err.message}`, 'error');
-      toast.error("Errore di connessione al backend locale");
-      setRunStatus(`Errore: ${err.message}`);
+      toast.error("Errore di connessione al backend");
     }
 
     setIsRunning(false);
@@ -616,7 +616,7 @@ export const TestSuiteSection = ({ prefill, onPrefillConsumed }: TestSuiteSectio
           {selectedCountry && (
             <div className="mt-3 flex items-center gap-1 text-xs text-muted-foreground">
               <FolderOpen className="w-3 h-3" />
-              <span>S3://TEST_SUITE</span>
+              <span>data/TEST_SUITE</span>
               <ChevronRight className="w-3 h-3" />
               <span className="text-foreground font-medium">{selectedCountry}</span>
               {selectedSegment && (
@@ -849,36 +849,6 @@ export const TestSuiteSection = ({ prefill, onPrefillConsumed }: TestSuiteSectio
                   ))}
                 </div>
               )}
-            </CardContent>
-          </Card>
-
-          {/* Local Execution Settings */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Settings className="w-4 h-4" />
-                Esecuzione Locale
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-muted-foreground">Path CategorizationEnginePython</label>
-                <Input
-                  value={cePythonPath}
-                  onChange={(e) => setCePythonPath(e.target.value)}
-                  placeholder="C:\_git\CategorizationEnginePython"
-                  className="font-mono text-xs"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-muted-foreground">Path TEST_SUITE locale (per esecuzione)</label>
-                <Input
-                  value={testsuiteRoot}
-                  onChange={(e) => setTestsuiteRoot(e.target.value)}
-                  placeholder="C:\_git\model-workflow-tracker\data\TEST_SUITE"
-                  className="font-mono text-xs"
-                />
-              </div>
             </CardContent>
           </Card>
 

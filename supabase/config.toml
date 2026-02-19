@@ -1,7 +1,1 @@
 project_id = "usuedrhosozarhsfowhh"
-
-[functions.s3-testsuite]
-verify_jwt = false
-
-[functions.run-testsuite]
-verify_jwt = false
