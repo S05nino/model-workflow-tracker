@@ -449,8 +449,8 @@ export const TestSuiteSection = ({ prefill, onPrefillConsumed }: TestSuiteSectio
     const config: Record<string, unknown> = {
       ce_python_path: cePythonPath,
       testsuite_root: testsuiteRoot,
-      s3_bucket: "s3-crif-studio-wwcc1mnt-de-prd-datalake",
-      s3_prefix: "CategorizationEngineTestSuite/TEST_SUITE/",
+      s3_bucket: "s3-crif-studio-wwcc1mnt-de-prd-stg",
+      s3_prefix: "TEST_SUITE/",
       azure_batch_vm_path: azureBatchVmPath,
       ServicePrincipal_CertificateThumbprint: certThumbprint,
       ServicePrincipal_ApplicationId: appId,
