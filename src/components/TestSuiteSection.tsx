@@ -111,7 +111,7 @@ export const TestSuiteSection = ({ prefill, onPrefillConsumed }: TestSuiteSectio
 
   // Local execution settings
   const [cePythonPath, setCePythonPath] = useState(String.raw`C:\_git\CategorizationEnginePython`);
-  const [testsuiteRoot, setTestsuiteRoot] = useState(String.raw`C:\_git\model-workflow-tracker\data\TEST_SUITE`);
+  
 
   // Azure Batch settings
   const [azureBatchVmPath, setAzureBatchVmPath] = useState(
@@ -448,7 +448,6 @@ export const TestSuiteSection = ({ prefill, onPrefillConsumed }: TestSuiteSectio
 
     const config: Record<string, unknown> = {
       ce_python_path: cePythonPath,
-      testsuite_root: testsuiteRoot,
       s3_bucket: "s3-crif-studio-wwcc1mnt-de-prd-stg",
       s3_prefix: "TEST_SUITE/",
       azure_batch_vm_path: azureBatchVmPath,
@@ -867,15 +866,6 @@ export const TestSuiteSection = ({ prefill, onPrefillConsumed }: TestSuiteSectio
                   value={cePythonPath}
                   onChange={(e) => setCePythonPath(e.target.value)}
                   placeholder="C:\_git\CategorizationEnginePython"
-                  className="font-mono text-xs"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-muted-foreground">Path TEST_SUITE locale (per esecuzione)</label>
-                <Input
-                  value={testsuiteRoot}
-                  onChange={(e) => setTestsuiteRoot(e.target.value)}
-                  placeholder="C:\_git\model-workflow-tracker\data\TEST_SUITE"
                   className="font-mono text-xs"
                 />
               </div>

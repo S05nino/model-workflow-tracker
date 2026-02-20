@@ -1,5 +1,6 @@
 """
 TestSuite handler – runs locally OR on AWS Lambda.
+Always uses S3 for input (download) and output (upload).
 
 Usage:
   Local:   python handler.py --config /path/to/config.json
@@ -19,12 +20,13 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 # ============================================================
-#  S3 HELPERS  (only used when running on Lambda)
+#  S3 HELPERS
 # ============================================================
 
 def _get_s3():
     import boto3
     return boto3.client("s3")
+
 
 def s3_download_prefix(s3, bucket, prefix, local_dir):
     paginator = s3.get_paginator("list_objects_v2")
@@ -129,14 +131,14 @@ def _get_batch_dir():
 
 
 # ============================================================
-#  RESOLVE PATHS  (local vs S3)
+#  RESOLVE PATHS  (always S3-based)
 # ============================================================
 
 def resolve_paths(config):
     """
-    Return (segment_path, sample_path, model_path, output_folder, cleanup_fn).
-    In local mode paths point to the S3-synced local TEST_SUITE folder.
-    In Lambda mode files are downloaded from S3 into /tmp.
+    Always download from S3 into a local temp directory, run tests there,
+    then upload results back to S3.
+    Returns (segment_path, sample_path, model_path, output_folder, date_str, cleanup_fn).
     """
     country = config["country"]
     segment = config["segment"].capitalize()
@@ -144,36 +146,28 @@ def resolve_paths(config):
     version = config.get("version", "x.x.x")
     output_folder_name = config.get("output_folder_name", "output")
 
-    # Calculate date string
     today = datetime.date.today().strftime("%y%m%d")
 
-    is_lambda = "AWS_LAMBDA_FUNCTION_NAME" in os.environ
+    s3_bucket = config.get("s3_bucket", os.environ.get("S3_BUCKET", ""))
+    s3_prefix = config.get("s3_prefix", os.environ.get("S3_PREFIX", ""))
 
-    if is_lambda:
-        # Lambda mode — download from S3
-        s3_bucket = config.get("s3_bucket", os.environ.get("S3_BUCKET", ""))
-        s3_prefix = config.get("s3_prefix", os.environ.get("S3_PREFIX", ""))
-        local_root = "/tmp/TEST_SUITE"
+    if not s3_bucket or not s3_prefix:
+        raise ValueError("s3_bucket and s3_prefix are required")
 
-        if os.path.exists(local_root):
-            shutil.rmtree(local_root)
+    local_root = "/tmp/TEST_SUITE"
+    if os.path.exists(local_root):
+        shutil.rmtree(local_root)
 
-        s3 = _get_s3()
-        s3_base = f"{s3_prefix}{data_root}/"
-        local_base = os.path.join(local_root, data_root)
+    s3 = _get_s3()
+    s3_base = f"{s3_prefix}{data_root}/"
+    local_base = os.path.join(local_root, data_root)
 
-        for subdir in ["sample", "model"]:
-            s3_download_prefix(s3, s3_bucket, f"{s3_base}{subdir}/", os.path.join(local_base, subdir))
+    # Download sample and model directories from S3
+    for subdir in ["sample", "model"]:
+        s3_download_prefix(s3, s3_bucket, f"{s3_base}{subdir}/", os.path.join(local_base, subdir))
 
-        segment_path = local_base
-        cleanup = lambda: shutil.rmtree(local_root, ignore_errors=True)
-    else:
-        # Local mode — use testsuite_root from config
-        testsuite_root = config.get("testsuite_root", "")
-        if not testsuite_root:
-            raise ValueError("testsuite_root is required for local execution")
-        segment_path = os.path.join(testsuite_root, data_root)
-        cleanup = lambda: None  # nothing to clean up
+    segment_path = local_base
+    cleanup = lambda: shutil.rmtree(local_root, ignore_errors=True)
 
     sample_path = os.path.join(segment_path, "sample")
     model_path = os.path.join(segment_path, "model")
@@ -188,14 +182,14 @@ def resolve_paths(config):
 # ============================================================
 
 def upload_results(config, output_folder):
-    """Upload results to S3 (both local and Lambda modes)."""
+    """Upload results to S3."""
     s3_bucket = config.get("s3_bucket")
     s3_prefix = config.get("s3_prefix")
     data_root = config.get("data_root", f"{config['country']}/{config['segment'].lower()}")
     output_folder_name = config.get("output_folder_name", "output")
 
     if not s3_bucket or not s3_prefix:
-        logger.info("No S3 config provided, skipping upload.")
+        logger.warning("No S3 config provided, skipping upload.")
         return
 
     try:
@@ -213,7 +207,7 @@ def upload_results(config, output_folder):
 # ============================================================
 
 def run_tests(config):
-    """Core logic: resolve paths, import TestRunner, execute tests, upload results."""
+    """Core logic: download from S3, import TestRunner, execute tests, upload results."""
     country = config["country"]
     segment = config["segment"].capitalize()
     is_tagger = segment.lower() == "tagger"
@@ -337,7 +331,7 @@ def run_tests(config):
     # Upload results to S3
     upload_results(config, output_folder)
 
-    # Cleanup (Lambda only)
+    # Cleanup temp files
     cleanup()
 
     result = {
