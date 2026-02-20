@@ -485,6 +485,7 @@ export const TestSuiteSection = ({ prefill, onPrefillConsumed }: TestSuiteSectio
 
     try {
       const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+      // Step 1: POST config to get configPath
       const runRes = await fetch(`${BACKEND_URL}/api/testsuite/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -492,31 +493,83 @@ export const TestSuiteSection = ({ prefill, onPrefillConsumed }: TestSuiteSectio
       });
       const runData = await runRes.json();
 
-      if (runData.ok) {
-        addLog(`✅ TestRunner avviato (PID: ${runData.pid})`, 'success');
-        toast.success("Test avviati!", {
-          description: "L'esecuzione è in corso in locale. I risultati appariranno su S3.",
-        });
-        setRunStatus("Test in esecuzione locale...");
-
-        // Start polling for output files on S3
-        addLog("⏳ Polling per output su S3...", 'info');
-        setPollingForOutput(true);
-        setPollCount(0);
-        setPollProgress(0);
-        pollForOutputs();
-      } else {
+      if (!runData.ok) {
         addLog(`⚠️ Errore: ${runData.error}`, 'error');
         toast.error("Errore nell'avvio dei test", { description: runData.error });
         setRunStatus(`Errore: ${runData.error}`);
+        setIsRunning(false);
+        return;
       }
+
+      // Step 2: Connect to SSE stream for real-time logs
+      const sseUrl = `${BACKEND_URL}/api/testsuite/run-stream?configPath=${encodeURIComponent(runData.configPath)}`;
+      const eventSource = new EventSource(sseUrl);
+
+      addLog("📡 Connesso allo stream di log in tempo reale...", 'success');
+      toast.success("Test avviati!", {
+        description: "I log del TestRunner verranno mostrati in tempo reale.",
+      });
+      setRunStatus("Test in esecuzione...");
+
+      eventSource.onmessage = (event) => {
+        if (event.data === '[DONE]') {
+          eventSource.close();
+          setIsRunning(false);
+          // Start polling for output files on S3
+          addLog("⏳ Polling per output su S3...", 'info');
+          setPollingForOutput(true);
+          setPollCount(0);
+          setPollProgress(0);
+          pollForOutputs();
+          return;
+        }
+
+        try {
+          const parsed = JSON.parse(event.data);
+          switch (parsed.type) {
+            case 'pid':
+              addLog(`✅ Processo avviato (PID: ${parsed.data})`, 'success');
+              break;
+            case 'stdout':
+              addLog(`${parsed.data}`, 'info');
+              break;
+            case 'stderr':
+              // stderr includes Python logging output (INFO, WARNING) - not all errors
+              addLog(`${parsed.data}`, parsed.data.toLowerCase().includes('error') ? 'error' : 'info');
+              break;
+            case 'exit':
+              if (parsed.data.code === 0) {
+                addLog("✅ Processo completato con successo!", 'success');
+                setRunStatus("Processo completato!");
+              } else {
+                addLog(`⚠️ Processo terminato con codice ${parsed.data.code}`, 'error');
+                setRunStatus(`Terminato con errore (codice ${parsed.data.code})`);
+              }
+              break;
+            case 'error':
+              addLog(`❌ Errore: ${parsed.data}`, 'error');
+              break;
+            case 'status':
+              addLog(`ℹ️ ${parsed.data}`, 'info');
+              break;
+          }
+        } catch {
+          // raw line
+          addLog(event.data, 'info');
+        }
+      };
+
+      eventSource.onerror = () => {
+        eventSource.close();
+        addLog("📡 Stream disconnesso", 'info');
+        setIsRunning(false);
+      };
     } catch (err: any) {
       addLog(`⚠️ Errore connessione: ${err.message}`, 'error');
       toast.error("Errore di connessione al backend locale");
       setRunStatus(`Errore: ${err.message}`);
+      setIsRunning(false);
     }
-
-    setIsRunning(false);
   };
 
   return (
