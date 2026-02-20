@@ -50,6 +50,10 @@ const writeData = (data) => {
   }
 };
 
+// ===== S3 proxy routes =====
+const s3Routes = require('./s3Routes');
+app.use('/api/s3', s3Routes);
+
 // ===== Test Suite routes (MUST be before generic /api/:table) =====
 const TESTSUITE_ROOT = process.env.TESTSUITE_ROOT || path.join(__dirname, '..', '..', 'data', 'TEST_SUITE');
 const CONFIG_DIR = process.env.TESTSUITE_CONFIG_DIR || path.join(__dirname, 'configs');

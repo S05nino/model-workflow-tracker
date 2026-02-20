@@ -1,4 +1,4 @@
-version: '3.8'
+# docker-compose.yml
 
 services:
   frontend:
@@ -23,6 +23,9 @@ services:
       - TESTSUITE_ROOT=/data/TEST_SUITE
       - TESTSUITE_CONFIG_DIR=/configs
       - PROJECT_ROOT=/project
+      - AWS_REGION=${AWS_REGION}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
     volumes:
       - ./data:/data
       - ./docker/backend/configs:/configs
