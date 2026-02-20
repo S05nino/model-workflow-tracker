@@ -36,7 +36,9 @@ serve(async (req) => {
 
     if (action === "list") {
       const relPath = url.searchParams.get("path") || "";
-      const prefix = S3_PREFIX + relPath;
+      // Ensure prefix ends with "/" so S3 lists contents, not the folder itself
+      const rawPrefix = S3_PREFIX + relPath;
+      const prefix = rawPrefix.endsWith("/") || rawPrefix === S3_PREFIX ? rawPrefix : rawPrefix + "/";
       const client = getS3Client();
 
       const command = new ListObjectsV2Command({
