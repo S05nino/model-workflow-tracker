@@ -1,5 +1,4 @@
 import { useState, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 
 interface LocalFolder {
   name: string;
@@ -20,8 +19,26 @@ interface ListResult {
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const API_URL = import.meta.env.VITE_API_URL || '';
+const isLocalMode = !!API_URL;
 
 async function callS3Function(params: Record<string, string>): Promise<Response> {
+  if (isLocalMode) {
+    // Local Docker mode: use Express backend
+    const action = params.action;
+    if (action === 'list') {
+      return fetch(`${API_URL}/testsuite/list?path=${encodeURIComponent(params.path || '')}`);
+    }
+    if (action === 'download') {
+      return fetch(`${API_URL}/testsuite/download?path=${encodeURIComponent(params.path || '')}`);
+    }
+    if (action === 'download-content') {
+      return fetch(`${API_URL}/testsuite/download?path=${encodeURIComponent(params.path || '')}`);
+    }
+    return fetch(`${API_URL}/testsuite/list?path=${encodeURIComponent(params.path || '')}`);
+  }
+
+  // Cloud mode: use Supabase edge function
   const qs = new URLSearchParams(params).toString();
   return fetch(`${SUPABASE_URL}/functions/v1/s3-testsuite?${qs}`, {
     headers: {
@@ -89,7 +106,9 @@ export function useLocalBrowser() {
   }, []);
 
   const getDownloadUrl = useCallback((relPath: string): string => {
-    // Returns a URL that will give a presigned S3 URL via the edge function
+    if (isLocalMode) {
+      return `${API_URL}/testsuite/download?path=${encodeURIComponent(relPath)}`;
+    }
     return `${SUPABASE_URL}/functions/v1/s3-testsuite?action=download&path=${encodeURIComponent(relPath)}`;
   }, []);
 
