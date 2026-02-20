@@ -129,7 +129,7 @@ app.post('/api/testsuite/config', (req, res) => {
   }
 });
 
-// Run tests: spawn handler.py locally with config
+// Run tests: save config and return config path for SSE streaming
 app.post('/api/testsuite/run', (req, res) => {
   const { config } = req.body;
   if (!config) {
@@ -146,7 +146,7 @@ app.post('/api/testsuite/run', (req, res) => {
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
   console.log(`[testsuite/run] Config saved: ${configPath}`);
 
-  // Determine handler.py location (lambda/ folder at project root)
+  // Determine handler.py location
   const projectRoot = process.env.PROJECT_ROOT || path.join(__dirname, '..', '..');
   const handlerPath = path.join(projectRoot, 'lambda', 'handler.py');
 
@@ -154,13 +154,48 @@ app.post('/api/testsuite/run', (req, res) => {
     return res.status(500).json({ error: `handler.py not found at ${handlerPath}` });
   }
 
-  // Build PYTHONPATH to include CategorizationEnginePython and CETestSuite
+  // Return the configPath so the client can connect to the SSE stream
+  res.json({ ok: true, configPath });
+});
+
+// SSE endpoint: streams stdout/stderr from handler.py in real-time
+app.get('/api/testsuite/run-stream', (req, res) => {
+  const configPath = req.query.configPath;
+  if (!configPath || !fs.existsSync(configPath)) {
+    return res.status(400).json({ error: 'Invalid or missing configPath' });
+  }
+
+  // Read config to get ce_python_path
+  let config;
+  try {
+    config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+  } catch (e) {
+    return res.status(400).json({ error: 'Cannot read config file' });
+  }
+
+  const cePath = config.ce_python_path;
+  const projectRoot = process.env.PROJECT_ROOT || path.join(__dirname, '..', '..');
+  const handlerPath = path.join(projectRoot, 'lambda', 'handler.py');
+
+  // Build PYTHONPATH
   const pythonPath = [
     cePath,
     path.join(cePath, 'CategorizationEngineTests', 'CETestSuite'),
   ].join(process.platform === 'win32' ? ';' : ':');
 
-  console.log(`[testsuite/run] Spawning python handler.py with PYTHONPATH=${pythonPath}`);
+  // SSE headers
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+  });
+
+  const sendEvent = (type, data) => {
+    res.write(`data: ${JSON.stringify({ type, data })}\n\n`);
+  };
+
+  sendEvent('status', 'Avvio processo handler.py...');
 
   const { spawn } = require('child_process');
   const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
@@ -169,20 +204,42 @@ app.post('/api/testsuite/run', (req, res) => {
     cwd: projectRoot,
   });
 
-  // Immediately respond that the process started
-  res.json({ ok: true, pid: proc.pid, configPath });
+  sendEvent('pid', proc.pid);
 
-  // Log stdout/stderr
-  proc.stdout.on('data', (data) => {
-    console.log(`[testsuite/run:stdout] ${data.toString().trim()}`);
+  proc.stdout.on('data', (chunk) => {
+    const lines = chunk.toString().split('\n').filter(l => l.trim());
+    for (const line of lines) {
+      sendEvent('stdout', line);
+    }
   });
-  proc.stderr.on('data', (data) => {
-    console.error(`[testsuite/run:stderr] ${data.toString().trim()}`);
+
+  proc.stderr.on('data', (chunk) => {
+    const lines = chunk.toString().split('\n').filter(l => l.trim());
+    for (const line of lines) {
+      sendEvent('stderr', line);
+    }
   });
+
   proc.on('close', (code) => {
-    console.log(`[testsuite/run] Process exited with code ${code}`);
+    sendEvent('exit', { code });
+    res.write('data: [DONE]\n\n');
+    res.end();
     // Clean up config file
     try { fs.unlinkSync(configPath); } catch {}
+  });
+
+  proc.on('error', (err) => {
+    sendEvent('error', err.message);
+    res.write('data: [DONE]\n\n');
+    res.end();
+  });
+
+  // If client disconnects, kill the process
+  req.on('close', () => {
+    if (!proc.killed) {
+      proc.kill();
+      console.log(`[testsuite/run-stream] Client disconnected, killed PID ${proc.pid}`);
+    }
   });
 });
 
