@@ -7,8 +7,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const S3_BUCKET = "s3-crif-studio-wwcc1mnt-de-prd-datalake";
-const S3_PREFIX = "CategorizationEngineTestSuite/TEST_SUITE/";
+const S3_BUCKET = "s3-crif-studio-wwcc1mnt-de-prd-stg";
+const S3_PREFIX = "TEST_SUITE/";
 
 function getS3Client(): S3Client {
   const region = Deno.env.get("AWS_REGION");
