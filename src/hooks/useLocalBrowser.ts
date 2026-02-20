@@ -1,5 +1,4 @@
 import { useState, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 
 interface LocalFolder {
   name: string;
@@ -20,8 +19,27 @@ interface ListResult {
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const API_URL = import.meta.env.VITE_API_URL;
+const isLocalMode = !!API_URL;
 
 async function callS3Function(params: Record<string, string>): Promise<Response> {
+  if (isLocalMode) {
+    // In local/Docker mode, use the backend S3 proxy
+    const action = params.action;
+    const path = params.path || '';
+    const baseUrl = API_URL.replace(/\/$/, '');
+    
+    if (action === 'list') {
+      return fetch(`${baseUrl}/s3/list?path=${encodeURIComponent(path)}`);
+    } else if (action === 'download') {
+      return fetch(`${baseUrl}/s3/download?path=${encodeURIComponent(path)}`);
+    } else if (action === 'download-content') {
+      return fetch(`${baseUrl}/s3/download-content?path=${encodeURIComponent(path)}`);
+    }
+    throw new Error(`Unknown action: ${action}`);
+  }
+
+  // Cloud mode: use Supabase edge function
   const qs = new URLSearchParams(params).toString();
   return fetch(`${SUPABASE_URL}/functions/v1/s3-testsuite?${qs}`, {
     headers: {
